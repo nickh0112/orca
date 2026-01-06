@@ -30,14 +30,28 @@ export async function GET(
       'Risk Level',
       'Findings Count',
       'Summary',
+      'Source URLs',
       'Status',
     ];
 
+    interface Finding {
+      source: {
+        url: string;
+        title: string;
+      };
+    }
+
     const rows = batch.creators.map((creator) => {
       const socialLinks = JSON.parse(creator.socialLinks) as string[];
-      const findings = creator.report?.findings
+      const findings: Finding[] = creator.report?.findings
         ? JSON.parse(creator.report.findings)
         : [];
+
+      // Extract all source URLs from findings
+      const sourceUrls = findings
+        .map((f) => f.source?.url)
+        .filter(Boolean)
+        .join('; ');
 
       return [
         escapeCsvField(creator.name),
@@ -45,6 +59,7 @@ export async function GET(
         creator.report?.riskLevel || 'UNKNOWN',
         findings.length.toString(),
         escapeCsvField(creator.report?.summary || ''),
+        escapeCsvField(sourceUrls),
         creator.status,
       ];
     });
