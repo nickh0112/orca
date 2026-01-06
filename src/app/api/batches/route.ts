@@ -35,12 +35,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, searchTerms, creators } = result.data;
+    const { name, searchTerms, userEmail, clientName, creators } = result.data;
 
     const batch = await db.batch.create({
       data: {
         name,
         searchTerms: searchTerms ? JSON.stringify(searchTerms) : null,
+        userEmail: userEmail || null,
+        clientName: clientName || null,
         creators: {
           create: creators.map((creator) => ({
             name: creator.name,

@@ -2,12 +2,14 @@
 
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Search } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Search, Download } from 'lucide-react';
 import { RiskBadge } from '@/components/report/risk-badge';
 import { FindingCard } from '@/components/report/finding-card';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { getPlatformFromUrl } from '@/lib/utils';
+import { generateCreatorPdf } from '@/components/report/creator-pdf';
 import type { Finding, RiskLevel } from '@/types';
 
 interface CreatorData {
@@ -37,6 +39,37 @@ export default function CreatorReportPage({
   const { batchId, creatorId } = use(params);
   const [creator, setCreator] = useState<CreatorData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (!creator || !creator.report) return;
+
+    setIsExporting(true);
+    try {
+      const blob = await generateCreatorPdf({
+        creatorName: creator.name,
+        batchName: creator.batch.name,
+        socialLinks: creator.socialLinks,
+        riskLevel: creator.report.riskLevel,
+        summary: creator.report.summary,
+        findings: creator.report.findings,
+        generatedAt: new Date(),
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${creator.name.replace(/[^a-z0-9]/gi, '_')}_report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     fetch(`/api/creators/${creatorId}`)
@@ -87,10 +120,22 @@ export default function CreatorReportPage({
 
         <header className="mb-8">
           <div className="flex items-start justify-between gap-4 mb-4">
-            <h1 className="text-2xl font-semibold text-zinc-50">
-              {creator.name}
-            </h1>
-            {report && <RiskBadge level={report.riskLevel} size="lg" />}
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-semibold text-zinc-50">
+                {creator.name}
+              </h1>
+              {report && <RiskBadge level={report.riskLevel} size="lg" />}
+            </div>
+            {report && (
+              <Button
+                variant="secondary"
+                onClick={handleExportPdf}
+                disabled={isExporting}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {isExporting ? 'Generating...' : 'Export PDF'}
+              </Button>
+            )}
           </div>
 
           {report?.summary && (

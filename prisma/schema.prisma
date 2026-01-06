@@ -12,10 +12,14 @@ model Batch {
   name        String
   status      BatchStatus @default(PENDING)
   searchTerms String?     // JSON array of custom search terms
+  userEmail   String?     // email of person who created the batch
+  clientName  String?     // client/brand this batch is for
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   completedAt DateTime?
   creators    Creator[]
+
+  @@index([userEmail])
 }
 
 model Creator {

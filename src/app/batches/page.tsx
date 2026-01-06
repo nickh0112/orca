@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { db } from '@/lib/db';
-import { BatchCard } from '@/components/batch/batch-card';
+import { BatchTabs } from '@/components/dashboard/batch-tabs';
+import type { BatchWithCounts } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export default async function BatchesPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-50 mb-1">
-              All Batches
+              Batches
             </h1>
             <p className="text-zinc-500">{batches.length} total batches</p>
           </div>
@@ -40,24 +41,7 @@ export default async function BatchesPage() {
           </Link>
         </div>
 
-        {batches.length > 0 ? (
-          <div className="space-y-3">
-            {batches.map((batch) => (
-              <BatchCard key={batch.id} batch={batch} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-16 border border-dashed border-zinc-800 rounded-xl">
-            <p className="text-zinc-500 mb-4">No batches created yet</p>
-            <Link
-              href="/batches/new"
-              className="inline-flex items-center gap-2 text-zinc-300 hover:text-white transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Create your first batch
-            </Link>
-          </div>
-        )}
+        <BatchTabs initialBatches={batches as BatchWithCounts[]} />
       </div>
     </div>
   );

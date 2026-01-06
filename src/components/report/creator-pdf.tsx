@@ -1,0 +1,215 @@
+'use client';
+
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  pdf,
+} from '@react-pdf/renderer';
+import type { Finding, RiskLevel } from '@/types';
+
+const styles = StyleSheet.create({
+  page: {
+    padding: 40,
+    fontFamily: 'Helvetica',
+    backgroundColor: '#ffffff',
+  },
+  header: {
+    marginBottom: 30,
+    borderBottomWidth: 2,
+    borderBottomColor: '#e4e4e7',
+    paddingBottom: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#18181b',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#71717a',
+  },
+  riskBadge: {
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  riskText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#18181b',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  summary: {
+    fontSize: 12,
+    color: '#3f3f46',
+    lineHeight: 1.6,
+    marginBottom: 20,
+  },
+  finding: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#fafafa',
+    borderRadius: 4,
+    borderLeftWidth: 3,
+  },
+  findingTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#18181b',
+    marginBottom: 6,
+  },
+  findingSummary: {
+    fontSize: 10,
+    color: '#52525b',
+    lineHeight: 1.5,
+    marginBottom: 8,
+  },
+  findingSource: {
+    fontSize: 9,
+    color: '#71717a',
+  },
+  socialLink: {
+    fontSize: 10,
+    color: '#3b82f6',
+    marginBottom: 4,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 40,
+    right: 40,
+    fontSize: 9,
+    color: '#a1a1aa',
+    textAlign: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#e4e4e7',
+    paddingTop: 12,
+  },
+  noFindings: {
+    fontSize: 12,
+    color: '#71717a',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+});
+
+const riskColors: Record<RiskLevel, { bg: string; text: string; border: string }> = {
+  LOW: { bg: '#dcfce7', text: '#166534', border: '#22c55e' },
+  MEDIUM: { bg: '#fef9c3', text: '#854d0e', border: '#eab308' },
+  HIGH: { bg: '#fed7aa', text: '#9a3412', border: '#f97316' },
+  CRITICAL: { bg: '#fecaca', text: '#991b1b', border: '#ef4444' },
+  UNKNOWN: { bg: '#e4e4e7', text: '#52525b', border: '#a1a1aa' },
+};
+
+interface CreatorPdfProps {
+  creatorName: string;
+  batchName: string;
+  socialLinks: string[];
+  riskLevel: RiskLevel;
+  summary: string | null;
+  findings: Finding[];
+  generatedAt: Date;
+}
+
+function CreatorPdfDocument({
+  creatorName,
+  batchName,
+  socialLinks,
+  riskLevel,
+  summary,
+  findings,
+  generatedAt,
+}: CreatorPdfProps) {
+  const riskColor = riskColors[riskLevel];
+
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{creatorName}</Text>
+          <Text style={styles.subtitle}>
+            Creator Vetting Report | {batchName}
+          </Text>
+          <View
+            style={[styles.riskBadge, { backgroundColor: riskColor.bg }]}
+          >
+            <Text style={[styles.riskText, { color: riskColor.text }]}>
+              {riskLevel} RISK
+            </Text>
+          </View>
+        </View>
+
+        {summary && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Summary</Text>
+            <Text style={styles.summary}>{summary}</Text>
+          </View>
+        )}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Social Profiles</Text>
+          {socialLinks.map((link, i) => (
+            <Text key={i} style={styles.socialLink}>
+              {link}
+            </Text>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Findings ({findings.length})
+          </Text>
+          {findings.length > 0 ? (
+            findings.map((finding, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.finding,
+                  { borderLeftColor: riskColors[finding.severity.toUpperCase() as RiskLevel]?.border || '#a1a1aa' },
+                ]}
+              >
+                <Text style={styles.findingTitle}>{finding.title}</Text>
+                <Text style={styles.findingSummary}>{finding.summary}</Text>
+                <Text style={styles.findingSource}>
+                  Source: {finding.source.title}
+                  {finding.source.publishedDate && ` | ${finding.source.publishedDate}`}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noFindings}>
+              No significant findings for this creator.
+            </Text>
+          )}
+        </View>
+
+        <Text style={styles.footer}>
+          Generated by Orca | {generatedAt.toLocaleDateString()} at{' '}
+          {generatedAt.toLocaleTimeString()}
+        </Text>
+      </Page>
+    </Document>
+  );
+}
+
+export async function generateCreatorPdf(props: CreatorPdfProps): Promise<Blob> {
+  const doc = <CreatorPdfDocument {...props} />;
+  const blob = await pdf(doc).toBlob();
+  return blob;
+}

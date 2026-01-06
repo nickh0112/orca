@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Clock, Users, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Clock, Users, CheckCircle, AlertCircle, Loader2, Building2 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 import type { BatchStatus } from '@/types';
 
@@ -8,11 +8,14 @@ interface BatchCardProps {
     id: string;
     name: string;
     status: BatchStatus;
+    userEmail?: string | null;
+    clientName?: string | null;
     createdAt: Date;
     _count: {
       creators: number;
     };
   };
+  showOwner?: boolean;
 }
 
 const statusConfig: Record<
@@ -25,7 +28,7 @@ const statusConfig: Record<
   FAILED: { icon: AlertCircle, color: 'text-red-400', label: 'Failed' },
 };
 
-export function BatchCard({ batch }: BatchCardProps) {
+export function BatchCard({ batch, showOwner = false }: BatchCardProps) {
   const { icon: Icon, color, label } = statusConfig[batch.status];
 
   return (
@@ -35,13 +38,24 @@ export function BatchCard({ batch }: BatchCardProps) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium text-zinc-100 truncate">{batch.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium text-zinc-100 truncate">{batch.name}</h3>
+            {batch.clientName && (
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-400">
+                <Building2 className="w-3 h-3" />
+                {batch.clientName}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-4 mt-2 text-sm text-zinc-500">
             <span className="flex items-center gap-1">
               <Users className="w-4 h-4" />
               {batch._count.creators} creators
             </span>
             <span>{formatDate(batch.createdAt)}</span>
+            {showOwner && batch.userEmail && (
+              <span className="text-zinc-600">by {batch.userEmail}</span>
+            )}
           </div>
         </div>
         <span className={cn('flex items-center gap-1.5 text-sm', color)}>

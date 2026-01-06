@@ -32,6 +32,8 @@ export interface BatchWithCounts {
   name: string;
   status: BatchStatus;
   searchTerms: string | null;
+  userEmail: string | null;
+  clientName: string | null;
   createdAt: Date;
   updatedAt: Date;
   completedAt: Date | null;

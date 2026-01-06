@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Play, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Play, RotateCcw, Download } from 'lucide-react';
 import { useBatchStream } from '@/hooks/use-batch-stream';
 import { CreatorResultCard } from '@/components/batch/creator-result-card';
 import { BatchProgress } from '@/components/batch/batch-progress';
@@ -70,6 +70,10 @@ export default function BatchDetailPage({
     window.location.reload();
   };
 
+  const handleExport = () => {
+    window.open(`/api/batches/${batchId}/export`, '_blank');
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -118,9 +122,17 @@ export default function BatchDetailPage({
         </Link>
 
         <header className="mb-8">
-          <h1 className="text-2xl font-semibold text-zinc-50 mb-4">
-            {batch.name}
-          </h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-semibold text-zinc-50">
+              {batch.name}
+            </h1>
+            {(batch.status === 'COMPLETED' || completedCount > 0) && (
+              <Button variant="secondary" onClick={handleExport}>
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+            )}
+          </div>
           <BatchProgress
             total={batch.creators.length}
             completed={completedCount}

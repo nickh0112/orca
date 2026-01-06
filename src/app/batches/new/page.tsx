@@ -10,11 +10,14 @@ import { SearchTermsInput } from '@/components/forms/search-terms-input';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { useUserEmail } from '@/hooks/use-user-email';
 import type { CreatorInput } from '@/lib/validators';
 
 export default function NewBatchPage() {
   const router = useRouter();
+  const { email: userEmail } = useUserEmail();
   const [batchName, setBatchName] = useState('');
+  const [clientName, setClientName] = useState('');
   const [creators, setCreators] = useState<CreatorInput[]>([]);
   const [searchTerms, setSearchTerms] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,6 +55,8 @@ export default function NewBatchPage() {
         body: JSON.stringify({
           name: batchName.trim(),
           searchTerms: searchTerms.length > 0 ? searchTerms : undefined,
+          userEmail: userEmail || undefined,
+          clientName: clientName.trim() || undefined,
           creators,
         }),
       });
@@ -86,16 +91,30 @@ export default function NewBatchPage() {
         </h1>
 
         <div className="space-y-6">
-          {/* Batch Name */}
+          {/* Batch Name & Client */}
           <Card>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Batch Name
-            </label>
-            <Input
-              value={batchName}
-              onChange={(e) => setBatchName(e.target.value)}
-              placeholder="e.g., Q1 2025 Campaign Creators"
-            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Batch Name
+                </label>
+                <Input
+                  value={batchName}
+                  onChange={(e) => setBatchName(e.target.value)}
+                  placeholder="e.g., Q1 2025 Campaign"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Client <span className="text-zinc-500">(optional)</span>
+                </label>
+                <Input
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  placeholder="e.g., Nike, Coca-Cola"
+                />
+              </div>
+            </div>
           </Card>
 
           {/* Custom Search Terms */}

@@ -10,6 +10,8 @@ export const creatorSchema = z.object({
 export const batchSchema = z.object({
   name: z.string().min(1, 'Batch name is required').max(200),
   searchTerms: z.array(z.string().max(50)).optional(),
+  userEmail: z.string().email().optional(),
+  clientName: z.string().max(200).optional(),
   creators: z.array(creatorSchema).min(1, 'At least one creator required'),
 });
 
