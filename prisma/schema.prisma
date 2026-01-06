@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Batch {
+  id          String      @id @default(cuid())
+  name        String
+  status      BatchStatus @default(PENDING)
+  searchTerms String?     // JSON array of custom search terms
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  completedAt DateTime?
+  creators    Creator[]
+}
+
+model Creator {
+  id          String        @id @default(cuid())
+  name        String
+  socialLinks String        // JSON array of social media URLs
+  status      CreatorStatus @default(PENDING)
+  batchId     String
+  batch       Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  report      Report?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Report {
+  id            String    @id @default(cuid())
+  creatorId     String    @unique
+  creator       Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  riskLevel     RiskLevel @default(UNKNOWN)
+  summary       String?
+  findings      String    // JSON array of findings
+  rawResults    String    // JSON of raw API results
+  searchQueries String    // JSON array of queries executed
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum BatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum CreatorStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  UNKNOWN
+}
