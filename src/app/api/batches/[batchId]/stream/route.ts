@@ -6,7 +6,7 @@ import {
   calculateRiskLevel,
   generateSummary,
 } from '@/lib/search-queries';
-import { validateResults } from '@/lib/result-validator';
+import { validateResults, generateRationale } from '@/lib/result-validator';
 
 // GET /api/batches/[batchId]/stream - SSE stream for batch processing
 export async function GET(
@@ -78,14 +78,20 @@ export async function GET(
             // Analyze validated findings
             const findings = analyzeValidatedResults(validatedResults, creator.name);
             const riskLevel = calculateRiskLevel(findings);
-            const summary = generateSummary(findings, riskLevel);
+
+            // Generate AI rationale summary
+            const rationale = await generateRationale(
+              findings,
+              creator.name,
+              socialLinks
+            );
 
             // Create report
             await db.report.create({
               data: {
                 creatorId: creator.id,
                 riskLevel,
-                summary,
+                summary: rationale,
                 findings: JSON.stringify(findings),
                 rawResults: JSON.stringify(results),
                 searchQueries: JSON.stringify(queries),
@@ -103,7 +109,7 @@ export async function GET(
               name: creator.name,
               riskLevel,
               findingsCount: findings.length,
-              summary,
+              summary: rationale,
             });
           } catch (error) {
             console.error(`Failed to process creator ${creator.name}:`, error);

@@ -99,6 +99,26 @@ const styles = StyleSheet.create({
     color: WHALAR.mediumGray,
     lineHeight: 1.7,
   },
+  analysisHeading: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: WHALAR.black,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  analysisBullet: {
+    fontSize: 10,
+    color: WHALAR.mediumGray,
+    lineHeight: 1.6,
+    marginLeft: 12,
+    marginBottom: 4,
+  },
+  analysisText: {
+    fontSize: 10,
+    color: WHALAR.mediumGray,
+    lineHeight: 1.6,
+    marginBottom: 4,
+  },
   finding: {
     marginBottom: 16,
     padding: 16,
@@ -252,13 +272,36 @@ function CreatorPdfDocument({
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Summary */}
+          {/* AI Analysis */}
           {summary && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Summary</Text>
+                <Text style={styles.sectionTitle}>AI Analysis</Text>
               </View>
-              <Text style={styles.summary}>{summary}</Text>
+              {summary.split('\n').map((line, i) => {
+                if (line.startsWith('## ')) {
+                  return (
+                    <Text key={i} style={styles.analysisHeading}>
+                      {line.replace('## ', '')}
+                    </Text>
+                  );
+                }
+                if (line.startsWith('- ')) {
+                  return (
+                    <Text key={i} style={styles.analysisBullet}>
+                      • {line.replace('- ', '')}
+                    </Text>
+                  );
+                }
+                if (line.trim()) {
+                  return (
+                    <Text key={i} style={styles.analysisText}>
+                      {line}
+                    </Text>
+                  );
+                }
+                return null;
+              })}
             </View>
           )}
 

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, useMemo, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Search, Download } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Search, Download, CircleAlert, CircleMinus, CircleCheck } from 'lucide-react';
 import { RiskBadge } from '@/components/report/risk-badge';
 import { FindingCard } from '@/components/report/finding-card';
 import { Card } from '@/components/ui/card';
@@ -11,6 +11,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { getPlatformFromUrl } from '@/lib/utils';
 import { generateCreatorPdf } from '@/components/report/creator-pdf';
 import type { Finding, RiskLevel } from '@/types';
+
+type SeverityFilter = 'all' | 'red' | 'yellow' | 'green';
 
 interface CreatorData {
   id: string;
@@ -40,6 +42,30 @@ export default function CreatorReportPage({
   const [creator, setCreator] = useState<CreatorData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
+
+  // Filter findings by severity
+  const { filteredFindings, counts } = useMemo(() => {
+    const findings = creator?.report?.findings || [];
+
+    const counts = {
+      all: findings.length,
+      red: findings.filter(f => f.severity === 'critical' || f.severity === 'high').length,
+      yellow: findings.filter(f => f.severity === 'medium').length,
+      green: findings.filter(f => f.severity === 'low').length,
+    };
+
+    let filtered = findings;
+    if (severityFilter === 'red') {
+      filtered = findings.filter(f => f.severity === 'critical' || f.severity === 'high');
+    } else if (severityFilter === 'yellow') {
+      filtered = findings.filter(f => f.severity === 'medium');
+    } else if (severityFilter === 'green') {
+      filtered = findings.filter(f => f.severity === 'low');
+    }
+
+    return { filteredFindings: filtered, counts };
+  }, [creator?.report?.findings, severityFilter]);
 
   const handleExportPdf = async () => {
     if (!creator || !creator.report) return;
@@ -138,10 +164,42 @@ export default function CreatorReportPage({
             )}
           </div>
 
-          {report?.summary && (
-            <p className="text-zinc-400">{report.summary}</p>
-          )}
         </header>
+
+        {/* AI Analysis */}
+        {report?.summary && (
+          <Card className="mb-6">
+            <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wide mb-3">
+              AI Analysis
+            </h2>
+            <div className="prose prose-invert prose-sm max-w-none">
+              {report.summary.split('\n').map((line, i) => {
+                if (line.startsWith('## ')) {
+                  return (
+                    <h3 key={i} className="text-zinc-200 font-medium mt-4 mb-2 text-base">
+                      {line.replace('## ', '')}
+                    </h3>
+                  );
+                }
+                if (line.startsWith('- ')) {
+                  return (
+                    <p key={i} className="text-zinc-400 ml-4 my-1">
+                      • {line.replace('- ', '')}
+                    </p>
+                  );
+                }
+                if (line.trim()) {
+                  return (
+                    <p key={i} className="text-zinc-400 my-1">
+                      {line}
+                    </p>
+                  );
+                }
+                return null;
+              })}
+            </div>
+          </Card>
+        )}
 
         {/* Social Links */}
         <Card className="mb-6">
@@ -167,14 +225,72 @@ export default function CreatorReportPage({
         {/* Findings */}
         {report && report.findings.length > 0 ? (
           <section className="mb-8">
-            <h2 className="text-lg font-medium text-zinc-200 mb-4">
-              Findings ({report.findings.length})
-            </h2>
-            <div className="space-y-4">
-              {report.findings.map((finding, i) => (
-                <FindingCard key={i} finding={finding} />
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-zinc-200">
+                Findings ({report.findings.length})
+              </h2>
+
+              {/* Severity Filter */}
+              <div className="flex items-center gap-1 p-1 bg-zinc-900 rounded-lg">
+                <button
+                  onClick={() => setSeverityFilter('all')}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                    severityFilter === 'all'
+                      ? 'bg-zinc-700 text-zinc-100'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  All ({counts.all})
+                </button>
+                <button
+                  onClick={() => setSeverityFilter('red')}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+                    severityFilter === 'red'
+                      ? 'bg-red-500/20 text-red-400'
+                      : 'text-zinc-400 hover:text-red-400'
+                  }`}
+                >
+                  <CircleAlert className="w-3.5 h-3.5" />
+                  Red ({counts.red})
+                </button>
+                <button
+                  onClick={() => setSeverityFilter('yellow')}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+                    severityFilter === 'yellow'
+                      ? 'bg-yellow-500/20 text-yellow-400'
+                      : 'text-zinc-400 hover:text-yellow-400'
+                  }`}
+                >
+                  <CircleMinus className="w-3.5 h-3.5" />
+                  Yellow ({counts.yellow})
+                </button>
+                <button
+                  onClick={() => setSeverityFilter('green')}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+                    severityFilter === 'green'
+                      ? 'bg-green-500/20 text-green-400'
+                      : 'text-zinc-400 hover:text-green-400'
+                  }`}
+                >
+                  <CircleCheck className="w-3.5 h-3.5" />
+                  Green ({counts.green})
+                </button>
+              </div>
             </div>
+
+            {filteredFindings.length > 0 ? (
+              <div className="space-y-4">
+                {filteredFindings.map((finding, i) => (
+                  <FindingCard key={i} finding={finding} />
+                ))}
+              </div>
+            ) : (
+              <Card className="text-center py-6">
+                <p className="text-zinc-400">
+                  No {severityFilter} findings.
+                </p>
+              </Card>
+            )}
           </section>
         ) : (
           <Card className="mb-8 text-center py-8">

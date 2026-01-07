@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ExaResult } from './exa';
+import type { Finding } from '@/types';
 import { extractUsername } from './utils';
 
 const anthropic = new Anthropic({
@@ -257,4 +258,90 @@ export async function validateResults(
   }
 
   return validatedResults;
+}
+
+/**
+ * Generate AI rationale summary for findings
+ */
+export async function generateRationale(
+  findings: Finding[],
+  creatorName: string,
+  socialLinks: string[]
+): Promise<string> {
+  if (findings.length === 0) {
+    return 'No significant brand safety concerns were identified for this creator. The search returned no relevant findings related to controversies, legal issues, or other risk factors.';
+  }
+
+  const handlesStr = socialLinks
+    .map(h => extractUsername(h))
+    .filter(Boolean)
+    .join(', ');
+
+  // Summarize findings for the prompt
+  const findingsSummary = findings.map((f, i) => {
+    const confidence = f.validation?.confidence || 'unknown';
+    const match = f.validation?.isSamePerson || 'unknown';
+    return `${i + 1}. [${f.severity.toUpperCase()}] ${f.title}
+   - Type: ${f.type}
+   - Summary: ${f.summary.slice(0, 200)}
+   - Source: ${f.source.url}
+   - Confidence: ${confidence}, Person Match: ${match}
+   ${f.validation?.reason ? `- Note: ${f.validation.reason}` : ''}`;
+  }).join('\n\n');
+
+  const prompt = `You are a brand safety analyst helping evaluate a content creator for potential partnership.
+
+CREATOR INFO:
+- Name: ${creatorName}
+- Social handles: ${handlesStr || 'Not provided'}
+
+FINDINGS (${findings.length} total):
+${findingsSummary}
+
+Please provide a concise analysis in this exact format:
+
+## Summary
+[2-3 sentences summarizing the overall risk profile]
+
+## Key Concerns
+[Bullet points of the most significant issues, if any. Focus on high/critical severity items]
+
+## Confidence Notes
+[Flag any findings that may be about a different person with a similar name, or seem irrelevant to brand safety. Be specific about which findings are questionable]
+
+## Recommendation
+[One sentence recommendation: proceed with caution, recommend further review, or safe to proceed]`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type');
+    }
+
+    return content.text;
+  } catch (error) {
+    console.error('Rationale generation failed:', error);
+    // Return a basic fallback summary
+    const criticalCount = findings.filter(f => f.severity === 'critical').length;
+    const highCount = findings.filter(f => f.severity === 'high').length;
+    const uncertainCount = findings.filter(f => f.validation?.isSamePerson === 'uncertain').length;
+
+    return `## Summary
+Found ${findings.length} potential concerns for ${creatorName}. ${criticalCount > 0 ? `${criticalCount} critical issue(s) require immediate attention. ` : ''}${highCount > 0 ? `${highCount} high-severity finding(s) detected. ` : ''}Manual review recommended.
+
+## Key Concerns
+${criticalCount > 0 || highCount > 0 ? '- Review critical and high severity findings carefully' : '- No critical issues identified'}
+
+## Confidence Notes
+${uncertainCount > 0 ? `- ${uncertainCount} finding(s) have uncertain person matching - verify these manually` : '- All findings appear to match the creator'}
+
+## Recommendation
+${criticalCount > 0 ? 'Proceed with significant caution - critical issues present.' : highCount > 0 ? 'Recommend further review before proceeding.' : 'Lower risk profile - standard review recommended.'}`;
+  }
 }
