@@ -3,6 +3,47 @@ import { extractUsername } from './utils';
 
 const exa = new Exa(process.env.EXA_API_KEY);
 
+// Retry configuration
+const EXA_CONFIG = {
+  MAX_RETRIES: 3,
+  BASE_DELAY: 150, // Reduced from 300ms
+  RETRY_DELAY: 1000, // Base delay for exponential backoff
+};
+
+/**
+ * Retry wrapper with exponential backoff
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = EXA_CONFIG.MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Check if it's a rate limit error (429)
+      const isRateLimit = lastError.message.includes('429') ||
+                          lastError.message.toLowerCase().includes('rate limit');
+
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = isRateLimit
+          ? EXA_CONFIG.RETRY_DELAY * Math.pow(2, attempt)
+          : EXA_CONFIG.RETRY_DELAY;
+
+        console.log(`Exa API retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export interface ExaResult {
   title: string;
   url: string;
@@ -142,15 +183,17 @@ export async function searchCreator(
     queries.push(`"${creatorName}" ${customQuery}`);
   }
 
-  // Execute searches with rate limiting
+  // Execute searches with rate limiting and retry logic
   for (const query of queries) {
     try {
       executedQueries.push(query);
 
-      const response = await exa.searchAndContents(query, {
-        type: 'auto',
-        numResults: 5,
-        text: { maxCharacters: 1500 },
+      const response = await withRetry(async () => {
+        return await exa.searchAndContents(query, {
+          type: 'auto',
+          numResults: 5,
+          text: { maxCharacters: 1500 },
+        });
       });
 
       if (response.results) {
@@ -165,10 +208,10 @@ export async function searchCreator(
         );
       }
 
-      // Small delay between requests to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Reduced delay between requests (was 300ms)
+      await new Promise((resolve) => setTimeout(resolve, EXA_CONFIG.BASE_DELAY));
     } catch (error) {
-      console.error(`Search failed for query: ${query}`, error);
+      console.error(`Search failed for query after retries: ${query}`, error);
     }
   }
 

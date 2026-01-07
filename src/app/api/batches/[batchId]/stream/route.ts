@@ -8,6 +8,18 @@ import {
 } from '@/lib/search-queries';
 import { validateResults, generateRationale } from '@/lib/result-validator';
 
+// Concurrency settings
+const CONCURRENT_CREATORS = 10; // Process 10 creators at a time for better throughput
+
+// Helper to chunk an array
+function chunk<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
+
 // GET /api/batches/[batchId]/stream - SSE stream for batch processing
 export async function GET(
   request: NextRequest,
@@ -23,6 +35,101 @@ export async function GET(
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
         );
+      };
+
+      // Process a single creator - returns result for tracking
+      const processCreator = async (creator: {
+        id: string;
+        name: string;
+        socialLinks: string;
+        status: string;
+      }, searchTerms: string[]) => {
+        // Skip already completed creators
+        if (creator.status === 'COMPLETED') {
+          return { skipped: true };
+        }
+
+        sendEvent('creator_started', {
+          creatorId: creator.id,
+          name: creator.name,
+        });
+
+        try {
+          // Update status to processing
+          await db.creator.update({
+            where: { id: creator.id },
+            data: { status: 'PROCESSING' },
+          });
+
+          // Perform research
+          const socialLinks = JSON.parse(creator.socialLinks);
+          const { results, queries } = await searchCreator(
+            creator.name,
+            socialLinks,
+            searchTerms
+          );
+
+          // Validate results with heuristics + AI review
+          const validatedResults = await validateResults(
+            results,
+            creator.name,
+            socialLinks
+          );
+
+          // Analyze validated findings
+          const findings = analyzeValidatedResults(validatedResults, creator.name);
+          const riskLevel = calculateRiskLevel(findings);
+
+          // Generate AI rationale summary
+          const rationale = await generateRationale(
+            findings,
+            creator.name,
+            socialLinks
+          );
+
+          // Create report
+          await db.report.create({
+            data: {
+              creatorId: creator.id,
+              riskLevel,
+              summary: rationale,
+              findings: JSON.stringify(findings),
+              rawResults: JSON.stringify(results),
+              searchQueries: JSON.stringify(queries),
+            },
+          });
+
+          // Update creator status
+          await db.creator.update({
+            where: { id: creator.id },
+            data: { status: 'COMPLETED' },
+          });
+
+          sendEvent('creator_completed', {
+            creatorId: creator.id,
+            name: creator.name,
+            riskLevel,
+            findingsCount: findings.length,
+            summary: rationale,
+          });
+
+          return { success: true };
+        } catch (error) {
+          console.error(`Failed to process creator ${creator.name}:`, error);
+
+          await db.creator.update({
+            where: { id: creator.id },
+            data: { status: 'FAILED' },
+          });
+
+          sendEvent('creator_failed', {
+            creatorId: creator.id,
+            name: creator.name,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+
+          return { failed: true };
+        }
       };
 
       try {
@@ -41,93 +148,22 @@ export async function GET(
           ? JSON.parse(batch.searchTerms)
           : [];
 
-        // Process each creator
-        for (const creator of batch.creators) {
-          // Skip already completed creators
-          if (creator.status === 'COMPLETED') {
-            continue;
+        // Filter out already completed creators
+        const pendingCreators = batch.creators.filter(c => c.status !== 'COMPLETED');
+
+        // Process creators in parallel batches
+        const creatorChunks = chunk(pendingCreators, CONCURRENT_CREATORS);
+
+        for (const creatorBatch of creatorChunks) {
+          // Process this chunk in parallel
+          await Promise.allSettled(
+            creatorBatch.map(creator => processCreator(creator, searchTerms))
+          );
+
+          // Small delay between batches to avoid overwhelming APIs
+          if (creatorChunks.indexOf(creatorBatch) < creatorChunks.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
           }
-
-          sendEvent('creator_started', {
-            creatorId: creator.id,
-            name: creator.name,
-          });
-
-          try {
-            // Update status to processing
-            await db.creator.update({
-              where: { id: creator.id },
-              data: { status: 'PROCESSING' },
-            });
-
-            // Perform research
-            const socialLinks = JSON.parse(creator.socialLinks);
-            const { results, queries } = await searchCreator(
-              creator.name,
-              socialLinks,
-              searchTerms
-            );
-
-            // Validate results with heuristics + AI review
-            const validatedResults = await validateResults(
-              results,
-              creator.name,
-              socialLinks
-            );
-
-            // Analyze validated findings
-            const findings = analyzeValidatedResults(validatedResults, creator.name);
-            const riskLevel = calculateRiskLevel(findings);
-
-            // Generate AI rationale summary
-            const rationale = await generateRationale(
-              findings,
-              creator.name,
-              socialLinks
-            );
-
-            // Create report
-            await db.report.create({
-              data: {
-                creatorId: creator.id,
-                riskLevel,
-                summary: rationale,
-                findings: JSON.stringify(findings),
-                rawResults: JSON.stringify(results),
-                searchQueries: JSON.stringify(queries),
-              },
-            });
-
-            // Update creator status
-            await db.creator.update({
-              where: { id: creator.id },
-              data: { status: 'COMPLETED' },
-            });
-
-            sendEvent('creator_completed', {
-              creatorId: creator.id,
-              name: creator.name,
-              riskLevel,
-              findingsCount: findings.length,
-              summary: rationale,
-            });
-          } catch (error) {
-            console.error(`Failed to process creator ${creator.name}:`, error);
-
-            await db.creator.update({
-              where: { id: creator.id },
-              data: { status: 'FAILED' },
-            });
-
-            sendEvent('creator_failed', {
-              creatorId: creator.id,
-              name: creator.name,
-              error: error instanceof Error ? error.message : 'Unknown error',
-            });
-          }
-
-          // Rate limiting delay between creators
-          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
 
         // Mark batch as completed

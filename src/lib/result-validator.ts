@@ -7,6 +7,49 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// Retry configuration
+const ANTHROPIC_CONFIG = {
+  MAX_RETRIES: 3,
+  BASE_DELAY: 50, // Reduced from 100ms
+  RETRY_DELAY: 1000, // Base delay for exponential backoff
+};
+
+/**
+ * Retry wrapper with exponential backoff for Anthropic API
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = ANTHROPIC_CONFIG.MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Check for rate limit (429) or overloaded (529) errors
+      const isRetryable = lastError.message.includes('429') ||
+                          lastError.message.includes('529') ||
+                          lastError.message.toLowerCase().includes('rate limit') ||
+                          lastError.message.toLowerCase().includes('overloaded');
+
+      if (attempt < maxRetries && isRetryable) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = ANTHROPIC_CONFIG.RETRY_DELAY * Math.pow(2, attempt);
+        console.log(`Anthropic API retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else if (!isRetryable) {
+        // Non-retryable error, throw immediately
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export interface ValidationResult {
   isRelevant: boolean;
   isSamePerson: 'yes' | 'no' | 'uncertain';
@@ -139,10 +182,12 @@ Respond with ONLY a JSON object in this exact format:
 }`;
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      messages: [{ role: 'user', content: prompt }],
+    const response = await withRetry(async () => {
+      return await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 256,
+        messages: [{ role: 'user', content: prompt }],
+      });
     });
 
     const content = response.content[0];
@@ -166,7 +211,7 @@ Respond with ONLY a JSON object in this exact format:
       reason: parsed.reason,
     };
   } catch (error) {
-    console.error('AI review failed:', error);
+    console.error('AI review failed after retries:', error);
     // Fallback to uncertain if AI review fails
     return {
       isRelevant: true, // Include it to be safe
@@ -239,8 +284,8 @@ export async function validateResults(
         });
       }
 
-      // Small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Reduced delay to avoid rate limiting (was 100ms)
+      await new Promise(resolve => setTimeout(resolve, ANTHROPIC_CONFIG.BASE_DELAY));
     } catch (error) {
       console.error('Validation error for result:', result.url, error);
       // Include with low confidence if validation fails
@@ -313,10 +358,12 @@ Please provide a concise analysis in this exact format:
 [One sentence recommendation: proceed with caution, recommend further review, or safe to proceed]`;
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
+    const response = await withRetry(async () => {
+      return await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
     });
 
     const content = response.content[0];
@@ -326,7 +373,7 @@ Please provide a concise analysis in this exact format:
 
     return content.text;
   } catch (error) {
-    console.error('Rationale generation failed:', error);
+    console.error('Rationale generation failed after retries:', error);
     // Return a basic fallback summary
     const criticalCount = findings.filter(f => f.severity === 'critical').length;
     const highCount = findings.filter(f => f.severity === 'high').length;

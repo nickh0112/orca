@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Users, Calendar, TrendingUp, CheckCircle, ExternalLink } from 'lucide-react';
+import { Users, Calendar, TrendingUp, CheckCircle, ExternalLink, User, UsersRound } from 'lucide-react';
+import { useUserEmail } from '@/hooks/use-user-email';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { TeamTable } from '@/components/dashboard/team-table';
 import { RiskChart } from '@/components/dashboard/risk-chart';
@@ -65,19 +66,28 @@ function getRiskLabel(score: number) {
   return riskScoreLabels[4];
 }
 
+type ViewMode = 'team' | 'personal';
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('team');
+  const { email, hasEmail } = useUserEmail();
 
   useEffect(() => {
-    fetch('/api/dashboard/stats')
+    setIsLoading(true);
+    const url = viewMode === 'personal' && email
+      ? `/api/dashboard/stats?userEmail=${encodeURIComponent(email)}`
+      : '/api/dashboard/stats';
+
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         setStats(data);
         setIsLoading(false);
       })
       .catch(() => setIsLoading(false));
-  }, []);
+  }, [viewMode, email]);
 
   if (isLoading) {
     return (
@@ -100,6 +110,41 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-6xl mx-auto px-6 py-8">
+
+        {/* View Toggle */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-zinc-50">
+            {viewMode === 'personal' ? 'My Performance' : 'Team Dashboard'}
+          </h1>
+          {hasEmail && (
+            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('team')}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  viewMode === 'team'
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                )}
+              >
+                <UsersRound className="w-4 h-4" />
+                Team
+              </button>
+              <button
+                onClick={() => setViewMode('personal')}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  viewMode === 'personal'
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                )}
+              >
+                <User className="w-4 h-4" />
+                Personal
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -132,16 +177,20 @@ export default function DashboardPage() {
           <TrendChart data={stats.activityTrend} />
         </div>
 
-        {/* Team Activity */}
-        <div className="mb-8">
-          <h2 className="text-lg font-medium text-zinc-200 mb-4">Team Activity</h2>
-          <TeamTable data={stats.teamActivity} />
-        </div>
+        {/* Team Activity - only show in team view */}
+        {viewMode === 'team' && (
+          <div className="mb-8">
+            <h2 className="text-lg font-medium text-zinc-200 mb-4">Team Activity</h2>
+            <TeamTable data={stats.teamActivity} />
+          </div>
+        )}
 
         {/* Recent Batches */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-zinc-200">Recent Batches</h2>
+            <h2 className="text-lg font-medium text-zinc-200">
+              {viewMode === 'personal' ? 'My Recent Batches' : 'Recent Batches'}
+            </h2>
             <Link
               href="/batches"
               className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"

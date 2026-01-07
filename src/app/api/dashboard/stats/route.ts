@@ -1,33 +1,47 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Check for user filter (personal view)
+    const searchParams = request.nextUrl.searchParams;
+    const userEmail = searchParams.get('userEmail');
+    const userFilter = userEmail ? { userEmail } : {};
+    const batchUserFilter = userEmail ? { batch: { userEmail } } : {};
+
     // Get current month start
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Summary stats
-    const totalCreators = await db.creator.count();
+    // Summary stats (filtered by user if specified)
+    const totalCreators = await db.creator.count({
+      where: batchUserFilter,
+    });
 
     const batchesThisMonth = await db.batch.count({
       where: {
         createdAt: { gte: monthStart },
+        ...userFilter,
       },
     });
 
-    const totalBatches = await db.batch.count();
+    const totalBatches = await db.batch.count({
+      where: userFilter,
+    });
     const completedBatches = await db.batch.count({
-      where: { status: 'COMPLETED' },
+      where: { status: 'COMPLETED', ...userFilter },
     });
     const successRate = totalBatches > 0
       ? Math.round((completedBatches / totalBatches) * 100)
       : 100;
 
-    // Risk distribution
+    // Risk distribution (filtered by user if specified)
     const riskCounts = await db.report.groupBy({
       by: ['riskLevel'],
       _count: { riskLevel: true },
+      where: userEmail
+        ? { creator: { batch: { userEmail } } }
+        : undefined,
     });
 
     const riskDistribution = {
@@ -91,13 +105,14 @@ export async function GET() {
       })
     );
 
-    // Activity trend (last 6 months)
+    // Activity trend (last 6 months, filtered by user if specified)
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const batches = await db.batch.findMany({
       where: {
         createdAt: { gte: sixMonthsAgo },
+        ...userFilter,
       },
       select: { createdAt: true },
       orderBy: { createdAt: 'asc' },
@@ -124,10 +139,11 @@ export async function GET() {
       batchCount: count,
     }));
 
-    // Recent batches
+    // Recent batches (filtered by user if specified)
     const recentBatches = await db.batch.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
+      where: userFilter,
       include: {
         _count: { select: { creators: true } },
       },
