@@ -1,58 +1,197 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Shield } from 'lucide-react';
-import { db } from '@/lib/db';
-import { BatchTabs } from '@/components/dashboard/batch-tabs';
-import { UserHeader } from '@/components/user/user-header';
-import type { BatchWithCounts } from '@/types';
+import { Plus, Users, Calendar, TrendingUp, CheckCircle, ExternalLink } from 'lucide-react';
+import { StatCard } from '@/components/dashboard/stat-card';
+import { TeamTable } from '@/components/dashboard/team-table';
+import { RiskChart } from '@/components/dashboard/risk-chart';
+import { TrendChart } from '@/components/dashboard/trend-chart';
+import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 
-export const dynamic = 'force-dynamic';
+interface DashboardStats {
+  summary: {
+    totalCreators: number;
+    batchesThisMonth: number;
+    avgRiskScore: number;
+    successRate: number;
+  };
+  teamActivity: Array<{
+    userEmail: string;
+    batchCount: number;
+    creatorCount: number;
+    completionRate: number;
+    lastActive: string | null;
+  }>;
+  riskDistribution: {
+    LOW: number;
+    MEDIUM: number;
+    HIGH: number;
+    CRITICAL: number;
+  };
+  activityTrend: Array<{
+    month: string;
+    batchCount: number;
+  }>;
+  recentBatches: Array<{
+    id: string;
+    name: string;
+    creatorCount: number;
+    userEmail: string | null;
+    createdAt: string;
+    status: string;
+  }>;
+}
 
-export default async function HomePage() {
-  const batches = await db.batch.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: {
-      _count: { select: { creators: true } },
-    },
-  });
+const statusColors: Record<string, string> = {
+  COMPLETED: 'bg-green-500/10 text-green-400',
+  PROCESSING: 'bg-yellow-500/10 text-yellow-400',
+  PENDING: 'bg-zinc-500/10 text-zinc-400',
+  FAILED: 'bg-red-500/10 text-red-400',
+};
 
-  const creatorStats = await db.creator.aggregate({
-    _count: true,
-  });
+const riskScoreLabels: Record<number, { label: string; color: string }> = {
+  1: { label: 'Low', color: 'text-green-400' },
+  2: { label: 'Medium', color: 'text-yellow-400' },
+  3: { label: 'High', color: 'text-orange-400' },
+  4: { label: 'Critical', color: 'text-red-400' },
+};
+
+function getRiskLabel(score: number) {
+  if (score < 1.5) return riskScoreLabels[1];
+  if (score < 2.5) return riskScoreLabels[2];
+  if (score < 3.5) return riskScoreLabels[3];
+  return riskScoreLabels[4];
+}
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/dashboard/stats')
+      .then((res) => res.json())
+      .then((data) => {
+        setStats(data);
+        setIsLoading(false);
+      })
+      .catch(() => setIsLoading(false));
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <p className="text-zinc-400">Failed to load dashboard</p>
+      </div>
+    );
+  }
+
+  const riskInfo = getRiskLabel(stats.summary.avgRiskScore);
 
   return (
     <div className="min-h-screen bg-zinc-950">
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <header className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Shield className="w-8 h-8 text-zinc-400" />
-              <h1 className="text-3xl font-semibold text-zinc-50">Orca</h1>
-            </div>
-            <UserHeader />
-          </div>
-          <p className="text-zinc-400">
-            Creator vetting for brand safety
-          </p>
-        </header>
+      <div className="max-w-6xl mx-auto px-6 py-8">
 
-        {/* Quick Actions */}
-        <div className="flex gap-3 mb-8">
-          <Link
-            href="/batches/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-100 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Batch
-          </Link>
-          <div className="flex items-center px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-zinc-400">
-            {creatorStats._count} creators vetted
-          </div>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <StatCard
+            title="Total Creators Vetted"
+            value={stats.summary.totalCreators}
+            icon={Users}
+          />
+          <StatCard
+            title="Batches This Month"
+            value={stats.summary.batchesThisMonth}
+            icon={Calendar}
+          />
+          <StatCard
+            title="Avg Risk Level"
+            value={stats.summary.avgRiskScore > 0 ? stats.summary.avgRiskScore.toFixed(1) : '-'}
+            subtitle={stats.summary.avgRiskScore > 0 ? riskInfo.label : 'No data'}
+            icon={TrendingUp}
+          />
+          <StatCard
+            title="Success Rate"
+            value={`${stats.summary.successRate}%`}
+            icon={CheckCircle}
+          />
         </div>
 
-        {/* Batch List with Tabs */}
-        <section>
-          <BatchTabs initialBatches={batches as BatchWithCounts[]} />
-        </section>
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+          <RiskChart data={stats.riskDistribution} />
+          <TrendChart data={stats.activityTrend} />
+        </div>
+
+        {/* Team Activity */}
+        <div className="mb-8">
+          <h2 className="text-lg font-medium text-zinc-200 mb-4">Team Activity</h2>
+          <TeamTable data={stats.teamActivity} />
+        </div>
+
+        {/* Recent Batches */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-zinc-200">Recent Batches</h2>
+            <Link
+              href="/batches"
+              className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              View all →
+            </Link>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            {stats.recentBatches.length > 0 ? (
+              <div className="divide-y divide-zinc-800/50">
+                {stats.recentBatches.slice(0, 5).map((batch) => (
+                  <Link
+                    key={batch.id}
+                    href={`/batches/${batch.id}`}
+                    className="flex items-center justify-between px-6 py-4 hover:bg-zinc-800/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-200">
+                          {batch.name}
+                        </p>
+                        <p className="text-xs text-zinc-500">
+                          {batch.creatorCount} creators • {batch.userEmail || 'Unknown'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          'px-2 py-1 rounded text-xs font-medium',
+                          statusColors[batch.status]
+                        )}
+                      >
+                        {batch.status}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {new Date(batch.createdAt).toLocaleDateString()}
+                      </span>
+                      <ExternalLink className="w-4 h-4 text-zinc-500" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="px-6 py-8 text-center">
+                <p className="text-zinc-400">No batches yet</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
