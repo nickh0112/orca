@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Trash2, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { BulkImport } from '@/components/forms/bulk-import';
 import { CreatorForm } from '@/components/forms/creator-form';
-import { CSVUpload } from '@/components/forms/csv-upload';
 import { SearchTermsInput } from '@/components/forms/search-terms-input';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,13 +22,15 @@ export default function NewBatchPage() {
   const [searchTerms, setSearchTerms] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
 
   const handleAddCreator = (creator: CreatorInput) => {
     setCreators((prev) => [...prev, creator]);
   };
 
-  const handleCSVParsed = (parsed: CreatorInput[]) => {
-    setCreators((prev) => [...prev, ...parsed]);
+  const handleBulkImport = (imported: CreatorInput[]) => {
+    setCreators((prev) => [...prev, ...imported]);
   };
 
   const handleRemoveCreator = (index: number) => {
@@ -117,37 +119,37 @@ export default function NewBatchPage() {
             </div>
           </Card>
 
-          {/* Custom Search Terms */}
-          <Card>
-            <h2 className="text-sm font-medium text-zinc-300 mb-1">
-              Custom Search Terms
-            </h2>
-            <p className="text-sm text-zinc-500 mb-4">
-              Add specific terms to search for beyond the defaults (lawsuit,
-              scandal, controversy, etc.)
-            </p>
-            <SearchTermsInput terms={searchTerms} onChange={setSearchTerms} />
-          </Card>
-
-          {/* Add Creators */}
+          {/* Bulk Import - Primary Method */}
           <Card>
             <h2 className="text-sm font-medium text-zinc-300 mb-4">
               Add Creators
             </h2>
-            <div className="grid gap-8 lg:grid-cols-2">
-              <div>
-                <h3 className="text-xs uppercase tracking-wide text-zinc-500 mb-3">
-                  Manual Entry
-                </h3>
+            <BulkImport
+              onImport={handleBulkImport}
+              existingCount={creators.length}
+            />
+          </Card>
+
+          {/* Manual Entry - Secondary */}
+          <Card>
+            <button
+              onClick={() => setShowManualEntry(!showManualEntry)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <span className="text-sm font-medium text-zinc-400">
+                Add single creator manually
+              </span>
+              {showManualEntry ? (
+                <ChevronUp className="w-4 h-4 text-zinc-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-zinc-500" />
+              )}
+            </button>
+            {showManualEntry && (
+              <div className="mt-4 pt-4 border-t border-zinc-800">
                 <CreatorForm onSubmit={handleAddCreator} />
               </div>
-              <div>
-                <h3 className="text-xs uppercase tracking-wide text-zinc-500 mb-3">
-                  CSV Upload
-                </h3>
-                <CSVUpload onParsed={handleCSVParsed} />
-              </div>
-            </div>
+            )}
           </Card>
 
           {/* Creator List */}
@@ -155,7 +157,7 @@ export default function NewBatchPage() {
             <Card>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-zinc-300">
-                  Creators ({creators.length})
+                  Creators to research ({creators.length})
                 </h2>
                 <Button
                   variant="ghost"
@@ -166,7 +168,7 @@ export default function NewBatchPage() {
                   Clear all
                 </Button>
               </div>
-              <div className="space-y-2 max-h-80 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto">
                 {creators.map((creator, index) => (
                   <div
                     key={index}
@@ -195,6 +197,31 @@ export default function NewBatchPage() {
               </div>
             </Card>
           )}
+
+          {/* Advanced Options */}
+          <Card>
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <span className="text-sm font-medium text-zinc-400">
+                Advanced search options
+              </span>
+              {showAdvanced ? (
+                <ChevronUp className="w-4 h-4 text-zinc-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-zinc-500" />
+              )}
+            </button>
+            {showAdvanced && (
+              <div className="mt-4 pt-4 border-t border-zinc-800">
+                <p className="text-sm text-zinc-500 mb-4">
+                  Add custom search terms beyond the defaults (lawsuit, scandal, controversy, etc.)
+                </p>
+                <SearchTermsInput terms={searchTerms} onChange={setSearchTerms} />
+              </div>
+            )}
+          </Card>
 
           {/* Error */}
           {error && (

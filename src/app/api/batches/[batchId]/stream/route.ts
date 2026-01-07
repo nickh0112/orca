@@ -2,10 +2,11 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { searchCreator } from '@/lib/exa';
 import {
-  analyzeResults,
+  analyzeValidatedResults,
   calculateRiskLevel,
   generateSummary,
 } from '@/lib/search-queries';
+import { validateResults } from '@/lib/result-validator';
 
 // GET /api/batches/[batchId]/stream - SSE stream for batch processing
 export async function GET(
@@ -67,8 +68,15 @@ export async function GET(
               searchTerms
             );
 
-            // Analyze and categorize findings
-            const findings = analyzeResults(results, creator.name);
+            // Validate results with heuristics + AI review
+            const validatedResults = await validateResults(
+              results,
+              creator.name,
+              socialLinks
+            );
+
+            // Analyze validated findings
+            const findings = analyzeValidatedResults(validatedResults, creator.name);
             const riskLevel = calculateRiskLevel(findings);
             const summary = generateSummary(findings, riskLevel);
 

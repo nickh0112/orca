@@ -1,6 +1,28 @@
-import type { Finding, FindingType, Severity, RiskLevel } from '@/types';
+import type { Finding, FindingType, Severity, RiskLevel, FindingValidation } from '@/types';
 import type { ExaResult } from './exa';
+import type { ValidatedResult } from './result-validator';
 
+// Analyze pre-validated results (preferred)
+export function analyzeValidatedResults(results: ValidatedResult[], creatorName: string): Finding[] {
+  return results.map((r) => ({
+    type: categorizeResult(r),
+    title: r.title,
+    summary: extractSummary(r.text || '', creatorName),
+    severity: determineSeverity(r),
+    source: {
+      url: r.url,
+      title: r.title,
+      publishedDate: r.publishedDate,
+    },
+    validation: {
+      isSamePerson: r.validation.isSamePerson,
+      confidence: r.validation.confidence,
+      reason: r.validation.reason,
+    } as FindingValidation,
+  }));
+}
+
+// Legacy function for backwards compatibility (uses basic filtering)
 export function analyzeResults(results: ExaResult[], creatorName: string): Finding[] {
   return results
     .filter((r) => isRelevantResult(r, creatorName))
@@ -17,6 +39,17 @@ export function analyzeResults(results: ExaResult[], creatorName: string): Findi
     }));
 }
 
+// Check if result is from a social platform (for display purposes)
+export function isSocialMediaSource(url: string): boolean {
+  return (
+    url.includes('instagram.com') ||
+    url.includes('tiktok.com') ||
+    url.includes('twitter.com') ||
+    url.includes('x.com') ||
+    url.includes('reddit.com')
+  );
+}
+
 function isRelevantResult(result: ExaResult, creatorName: string): boolean {
   const text = `${result.title} ${result.text || ''}`.toLowerCase();
   const nameParts = creatorName.toLowerCase().split(' ');
@@ -24,34 +57,56 @@ function isRelevantResult(result: ExaResult, creatorName: string): boolean {
   // Check if any part of the name appears in the result
   const hasName = nameParts.some((part) => part.length > 2 && text.includes(part));
 
-  // Check for controversy-related content
-  const controversyTerms = [
-    'lawsuit',
-    'controversy',
-    'scandal',
-    'court',
-    'allegations',
-    'accused',
-    'fired',
-    'cancelled',
-    'apology',
-    'backlash',
-    'outrage',
+  // Check for controversy-related content (expanded list)
+  const relevantTerms = [
+    // Legal/Criminal
+    'lawsuit', 'sued', 'court', 'legal', 'arrested', 'criminal',
+    'convicted', 'investigation', 'restraining order', 'settlement',
+    // Platform actions
+    'banned', 'suspended', 'demonetized', 'terminated', 'removed',
+    // Fraud/Scam
+    'scam', 'fraud', 'ftc', 'undisclosed',
+    // Brand issues
+    'dropped', 'partnership ended', 'sponsorship',
+    // Harassment/Abuse
+    'harassment', 'bullying', 'abuse', 'toxic', 'hostile',
+    // Offensive content
+    'racist', 'offensive', 'slur', 'antisemitic', 'homophobic', 'sexist',
+    // General controversy
+    'controversy', 'scandal', 'allegations', 'accused', 'fired',
+    'cancelled', 'apology', 'backlash', 'outrage', 'problematic',
+    'boycott', 'called out',
   ];
 
-  const hasControversy = controversyTerms.some((term) => text.includes(term));
+  const hasRelevantContent = relevantTerms.some((term) => text.includes(term));
 
-  return hasName && hasControversy;
+  return hasName && hasRelevantContent;
 }
 
 function categorizeResult(result: ExaResult): FindingType {
   const text = `${result.title} ${result.text || ''}`.toLowerCase();
+  const url = result.url.toLowerCase();
 
-  if (/court|lawsuit|sued|legal|settlement|judge|verdict/.test(text)) {
+  // Check URL for platform-specific categorization
+  if (url.includes('reddit.com')) {
+    return 'reddit_mention';
+  }
+
+  if (
+    url.includes('instagram.com') ||
+    url.includes('tiktok.com') ||
+    url.includes('twitter.com') ||
+    url.includes('x.com')
+  ) {
+    return 'social_post';
+  }
+
+  // Content-based categorization
+  if (/court|lawsuit|sued|legal|settlement|judge|verdict|arrested|criminal|convicted|restraining order/.test(text)) {
     return 'court_case';
   }
 
-  if (/twitter|tweet|instagram|tiktok|post|video|clip/.test(text)) {
+  if (/twitter|tweet|instagram|tiktok|post|video|clip|caption/.test(text)) {
     return 'social_controversy';
   }
 
@@ -69,7 +124,16 @@ function determineSeverity(result: ExaResult): Severity {
     'abuse',
     'harassment',
     'fraud',
+    'convicted',
+    'rape',
+    'sexual assault',
+    'child',
+    'minor',
+    'trafficking',
+    'murder',
+    'manslaughter',
   ];
+
   const highTerms = [
     'lawsuit',
     'court',
@@ -78,13 +142,34 @@ function determineSeverity(result: ExaResult): Severity {
     'terminated',
     'racist',
     'sexist',
+    'homophobic',
+    'antisemitic',
+    'slur',
+    'blackface',
+    'scam',
+    'banned',
+    'suspended',
+    'restraining order',
+    'domestic violence',
+    'ftc',
+    'investigation',
   ];
+
   const mediumTerms = [
     'controversy',
     'scandal',
     'backlash',
     'cancelled',
     'outrage',
+    'problematic',
+    'offensive',
+    'allegations',
+    'accused',
+    'dropped',
+    'demonetized',
+    'apology',
+    'toxic',
+    'bullying',
   ];
 
   if (criticalTerms.some((term) => text.includes(term))) return 'critical';

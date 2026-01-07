@@ -2,8 +2,23 @@ export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNKNOWN';
 export type BatchStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type CreatorStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
-export type FindingType = 'court_case' | 'news_article' | 'social_controversy' | 'other';
+export type FindingType =
+  | 'court_case'
+  | 'news_article'
+  | 'social_controversy'
+  | 'social_post'      // Direct content from creator's social media
+  | 'reddit_mention'   // Reddit discussion about creator
+  | 'other';
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
+
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+export type PersonMatch = 'yes' | 'no' | 'uncertain';
+
+export interface FindingValidation {
+  isSamePerson: PersonMatch;
+  confidence: ConfidenceLevel;
+  reason?: string;
+}
 
 export interface Finding {
   type: FindingType;
@@ -15,6 +30,7 @@ export interface Finding {
     title: string;
     publishedDate?: string;
   };
+  validation?: FindingValidation;
 }
 
 export interface CreatorResult {
