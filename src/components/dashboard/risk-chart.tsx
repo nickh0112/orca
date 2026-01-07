@@ -76,7 +76,7 @@ export function RiskChart({ data }: RiskChartProps) {
               }}
               labelStyle={{ color: '#fafafa' }}
               itemStyle={{ color: '#a1a1aa' }}
-              formatter={(value: number) => [`${value} creators`, 'Count']}
+              formatter={(value) => [`${value ?? 0} creators`, 'Count']}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>
               {chartData.map((entry, index) => (

@@ -60,7 +60,7 @@ export function TrendChart({ data }: TrendChartProps) {
               }}
               labelStyle={{ color: '#fafafa' }}
               itemStyle={{ color: '#a1a1aa' }}
-              formatter={(value: number) => [`${value} batches`, 'Batches']}
+              formatter={(value) => [`${value ?? 0} batches`, 'Batches']}
             />
             <Line
               type="monotone"
