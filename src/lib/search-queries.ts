@@ -151,8 +151,7 @@ function determineSeverity(result: ExaResult): Severity {
     'suspended',
     'restraining order',
     'domestic violence',
-    'ftc',
-    'investigation',
+    'police investigation',
   ];
 
   const mediumTerms = [

@@ -79,7 +79,6 @@ export const SEARCH_QUERIES = {
   fraud: [
     'scam',
     'fraud',
-    'FTC violation',
     'undisclosed ad',
     'undisclosed sponsorship',
   ],
@@ -150,31 +149,30 @@ export async function searchCreator(
   queries.push(`"${creatorName}" lawsuit OR sued OR "court case" OR "legal action"`);
 
   // Criminal
-  queries.push(`"${creatorName}" arrested OR "criminal charges" OR convicted OR investigation`);
+  queries.push(`"${creatorName}" arrested OR "criminal charges" OR convicted OR "police investigation"`);
 
   // Platform actions
   queries.push(`"${creatorName}" banned OR suspended OR "account terminated" OR demonetized`);
 
   // Fraud/Scam
-  queries.push(`"${creatorName}" scam OR fraud OR "FTC" OR "undisclosed"`);
+  queries.push(`"${creatorName}" scam OR fraud OR "undisclosed sponsorship" OR "undisclosed ad"`);
 
   // Tier 2: Important context
   // Brand issues
   queries.push(`"${creatorName}" "dropped by" OR "partnership ended" OR "lost sponsorship"`);
 
   // Harassment/Abuse
-  queries.push(`"${creatorName}" harassment OR bullying OR "abuse allegations" OR "toxic"`);
+  queries.push(`"${creatorName}" harassment OR bullying OR "abuse allegations" OR "toxic behavior"`);
 
   // Offensive content
-  queries.push(`"${creatorName}" racist OR offensive OR slur OR antisemitic OR homophobic`);
+  queries.push(`"${creatorName}" racist OR "offensive comments" OR slur OR antisemitic OR homophobic`);
 
-  // Tier 3: General controversy
-  queries.push(`"${creatorName}" controversy OR scandal OR allegations`);
-  queries.push(`"${creatorName}" cancelled OR problematic OR backlash OR apology`);
+  // Tier 3: General controversy (combined query, removed apology/problematic - too common)
+  queries.push(`"${creatorName}" controversy OR scandal OR allegations OR cancelled OR backlash`);
 
   // Username-based queries (catch content under handles)
   for (const username of usernames.slice(0, 2)) {
-    queries.push(`"@${username}" controversy OR scandal OR cancelled OR problematic`);
+    queries.push(`"@${username}" controversy OR scandal OR cancelled OR backlash`);
   }
 
   // Add custom terms if provided
