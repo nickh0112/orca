@@ -1,92 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
 import {
   SocialMediaContent,
   SocialMediaPost,
   SocialMediaAnalysis,
   FlaggedPost,
-  BrandDetectionResult,
   KeywordDetectionResult,
 } from '@/types/social-media';
 import type { Finding, Severity } from '@/types';
-import { detectBrands, aggregateBrands } from './brand-detector';
 import { detectSensitiveKeywords, aggregateKeywordResults } from './keyword-detector';
+import { screenPostsWithHaiku, getScreeningSummary, ScreeningResult } from './haiku-screener';
+import { makeVettingDecisions, VettingResult, CreatorContext } from './vetting-agent';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-// Retry configuration
+// Configuration
 const CONFIG = {
-  MAX_RETRIES: 3,
-  RETRY_DELAY: 1000,
   MAX_POSTS_PER_BATCH: 50, // Analyze posts in batches to avoid token limits
 };
-
-/**
- * Retry wrapper with exponential backoff
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = CONFIG.MAX_RETRIES
-): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      const isRetryable =
-        lastError.message.includes('429') ||
-        lastError.message.includes('529') ||
-        lastError.message.toLowerCase().includes('rate limit') ||
-        lastError.message.toLowerCase().includes('overloaded');
-
-      if (attempt < maxRetries && isRetryable) {
-        const delay = CONFIG.RETRY_DELAY * Math.pow(2, attempt);
-        console.log(`Claude API retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else if (!isRetryable) {
-        throw lastError;
-      }
-    }
-  }
-
-  throw lastError;
-}
-
-/**
- * Format posts for the analysis prompt (includes transcripts when available)
- */
-function formatPostsForPrompt(posts: SocialMediaPost[]): string {
-  return posts
-    .map((post, i) => {
-      const date = new Date(post.timestamp).toLocaleDateString();
-      const engagement = [
-        post.engagement.likes && `${post.engagement.likes} likes`,
-        post.engagement.comments && `${post.engagement.comments} comments`,
-        post.engagement.views && `${post.engagement.views} views`,
-        post.engagement.shares && `${post.engagement.shares} shares`,
-      ]
-        .filter(Boolean)
-        .join(', ');
-
-      let content = `[Post ${i + 1}] (${date}${engagement ? ` | ${engagement}` : ''})
-ID: ${post.id}
-URL: ${post.permalink}
-Caption: ${post.caption.slice(0, 500)}${post.caption.length > 500 ? '...' : ''}`;
-
-      // Include transcript if available (truncate for token limits)
-      if (post.transcript && post.transcript.trim().length > 0) {
-        const truncatedTranscript = post.transcript.slice(0, 1000);
-        content += `\nTranscript: ${truncatedTranscript}${post.transcript.length > 1000 ? '...' : ''}`;
-      }
-
-      return content;
-    })
-    .join('\n\n');
-}
 
 /**
  * Get combined content (caption + transcript) for a post
@@ -99,228 +26,112 @@ function getPostFullContent(post: SocialMediaPost): string {
   return content;
 }
 
-// Enhanced batch analysis result
-interface EnhancedBatchResult {
+// Two-tier analysis result
+interface TwoTierAnalysisResult {
   flaggedPosts: FlaggedPost[];
-  brandResults: Map<string, BrandDetectionResult>;
+  screeningResults: ScreeningResult[];
+  vettingResult: VettingResult;
   keywordResults: Map<string, KeywordDetectionResult>;
 }
 
 /**
- * Run pre-analysis detection (keywords + brands) before Claude analysis
+ * Run local keyword detection (no API, fast)
  */
-async function runPreAnalysisDetection(
-  posts: SocialMediaPost[],
-  platform: 'instagram' | 'tiktok' | 'youtube'
-): Promise<{
-  brandResults: Map<string, BrandDetectionResult>;
-  keywordResults: Map<string, KeywordDetectionResult>;
-}> {
-  const brandResults = new Map<string, BrandDetectionResult>();
+function runKeywordDetection(
+  posts: SocialMediaPost[]
+): Map<string, KeywordDetectionResult> {
   const keywordResults = new Map<string, KeywordDetectionResult>();
 
-  // Run keyword detection (local, fast) for all posts
   for (const post of posts) {
     const content = getPostFullContent(post);
     const keywordResult = detectSensitiveKeywords(content);
     keywordResults.set(post.id, keywordResult);
   }
 
-  // Run brand detection (Claude API) - process sequentially to avoid rate limits
-  for (const post of posts) {
-    const content = getPostFullContent(post);
-    try {
-      const brandResult = await detectBrands(content, platform);
-      brandResults.set(post.id, brandResult);
-    } catch (error) {
-      console.error(`Brand detection failed for post ${post.id}:`, error);
-      brandResults.set(post.id, {
-        isAd: false,
-        adIndicators: [],
-        brands: [],
-        summary: 'Brand detection failed',
-      });
-    }
-    // Small delay between API calls
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  return { brandResults, keywordResults };
+  return keywordResults;
 }
 
 /**
- * Format pre-analysis results for the prompt
+ * Two-tier analysis: Haiku screens, Opus decides
+ *
+ * Flow:
+ * 1. Local keyword detection (no API)
+ * 2. Haiku screening (extract potential issues)
+ * 3. Opus vetting (final decisions on flagged items)
  */
-function formatPreAnalysisForPrompt(
-  posts: SocialMediaPost[],
-  brandResults: Map<string, BrandDetectionResult>,
-  keywordResults: Map<string, KeywordDetectionResult>
-): string {
-  const parts: string[] = [];
-
-  // Aggregate keyword flags
-  const keywordAggregated = aggregateKeywordResults(keywordResults);
-  if (keywordAggregated.allFlaggedTerms.length > 0) {
-    parts.push(`KEYWORD FLAGS DETECTED: ${keywordAggregated.allFlaggedTerms.join(', ')}`);
-    parts.push(`Keyword severity breakdown - Critical: ${keywordAggregated.severityCounts.critical}, High: ${keywordAggregated.severityCounts.high}, Medium: ${keywordAggregated.severityCounts.medium}, Low: ${keywordAggregated.severityCounts.low}`);
-  }
-
-  // Aggregate brand mentions
-  const brandAggregated = aggregateBrands(brandResults);
-  if (brandAggregated.allBrands.length > 0) {
-    parts.push(`BRANDS MENTIONED: ${brandAggregated.allBrands.join(', ')}`);
-    if (brandAggregated.sponsoredBrands.length > 0) {
-      parts.push(`SPONSORED/AD CONTENT DETECTED for brands: ${brandAggregated.sponsoredBrands.join(', ')}`);
-    }
-  }
-
-  // Per-post details for high-severity flags
-  for (const post of posts) {
-    const keywords = keywordResults.get(post.id);
-    const brands = brandResults.get(post.id);
-
-    const postFlags: string[] = [];
-
-    if (keywords && keywords.overallRisk !== 'low') {
-      postFlags.push(`Keywords: ${keywords.flaggedTerms.join(', ')} (${keywords.overallRisk} risk)`);
-    }
-
-    if (brands && brands.isAd) {
-      postFlags.push(`Ad indicators: ${brands.adIndicators.join(', ')}`);
-    }
-
-    if (postFlags.length > 0) {
-      parts.push(`Post ${post.id}: ${postFlags.join('; ')}`);
-    }
-  }
-
-  return parts.length > 0 ? parts.join('\n') : 'No pre-analysis flags detected.';
-}
-
-/**
- * Analyze social media posts for brand safety concerns using Claude Opus 4.5
- * Enhanced with transcript, brand detection, and keyword detection
- */
-async function analyzePostsBatch(
+async function analyzePlatformContent(
   posts: SocialMediaPost[],
   platform: 'instagram' | 'tiktok' | 'youtube',
   handle: string,
   creatorName: string
-): Promise<EnhancedBatchResult> {
+): Promise<TwoTierAnalysisResult> {
   if (posts.length === 0) {
     return {
       flaggedPosts: [],
-      brandResults: new Map(),
+      screeningResults: [],
+      vettingResult: {
+        decisions: [],
+        overallRisk: 'low',
+        summary: 'No posts to analyze.',
+        recommendation: 'approve',
+        recommendationRationale: 'No content available for analysis.',
+      },
       keywordResults: new Map(),
     };
   }
 
-  // Step 1: Run pre-analysis detection (keywords + brands)
-  console.log(`Running pre-analysis detection for ${posts.length} ${platform} posts...`);
-  const { brandResults, keywordResults } = await runPreAnalysisDetection(posts, platform);
+  // Step 1: Local keyword detection (no API cost)
+  console.log(`[Tier 0] Running local keyword detection for ${posts.length} ${platform} posts...`);
+  const keywordResults = runKeywordDetection(posts);
+  const keywordAggregated = aggregateKeywordResults(keywordResults);
+  console.log(`  → ${keywordAggregated.allFlaggedTerms.length} keyword flags found`);
 
-  // Step 2: Format posts and pre-analysis for Claude
-  const postsText = formatPostsForPrompt(posts);
-  const preAnalysisText = formatPreAnalysisForPrompt(posts, brandResults, keywordResults);
+  // Step 2: Haiku screening (cheap, fast, conservative)
+  console.log(`[Tier 1] Haiku screening ${posts.length} ${platform} posts...`);
+  const screeningResults = await screenPostsWithHaiku(posts, platform, handle);
+  console.log(`  → ${getScreeningSummary(screeningResults)}`);
 
-  const prompt = `You are a brand safety analyst reviewing a creator's social media content for potential brand partnership risks.
+  // Step 3: Opus vetting (expensive, final decisions)
+  const creatorContext: CreatorContext = {
+    name: creatorName,
+    platforms: [platform],
+    handle,
+  };
 
-CREATOR: ${creatorName}
-PLATFORM: ${platform.toUpperCase()}
-HANDLE: @${handle}
+  console.log(`[Tier 2] Opus vetting agent making final decisions...`);
+  const vettingResult = await makeVettingDecisions(
+    screeningResults,
+    posts,
+    creatorContext,
+    platform
+  );
+  console.log(`  → ${vettingResult.decisions.length} confirmed risks, recommendation: ${vettingResult.recommendation}`);
 
-PRE-ANALYSIS DETECTION RESULTS:
-${preAnalysisText}
-
-POSTS TO ANALYZE (${posts.length} posts):
-${postsText}
-
-Using BOTH the pre-analysis results AND your own analysis, evaluate each post for brand safety concerns including:
-- Offensive or controversial language (slurs, hate speech, discriminatory content)
-- Strong political statements or partisan content
-- Adult content references or suggestive material
-- Drug or alcohol references (especially promoting substance use)
-- Violence or threatening content
-- Potential legal issues (defamation, copyright, illegal activity)
-- Brand conflicts or negative brand mentions (consider the detected brands above)
-- Undisclosed sponsored content (if brands detected but no disclosure)
-- Misinformation or conspiracy theories
-- Harassment or bullying behavior
-
-Pay special attention to:
-1. Content in TRANSCRIPTS (spoken words in videos) - these often reveal more than captions
-2. KEYWORD FLAGS from pre-analysis - investigate these in context
-3. BRAND MENTIONS - especially undisclosed sponsorships or brand conflicts
-
-For each post with concerns, assign a severity level:
-- "critical": Hate speech, illegal activity, severe controversies that would immediately disqualify partnership
-- "high": Strong political content, adult themes, drug promotion, undisclosed sponsorships, significant brand safety risk
-- "medium": Moderate concerns that warrant attention (mild profanity, controversial opinions, minor brand conflicts)
-- "low": Minor concerns that are noteworthy but not dealbreakers
-
-Respond with ONLY a JSON array of flagged posts. If no concerns are found, return an empty array [].
-
-Format:
-[
-  {
-    "postId": "post_id_from_above",
-    "concerns": ["specific concern 1", "specific concern 2"],
-    "severity": "low" | "medium" | "high" | "critical",
-    "reason": "Brief explanation of why this is a brand safety concern"
-  }
-]`;
-
-  try {
-    const response = await withRetry(async () => {
-      return await anthropic.messages.create({
-        model: 'claude-opus-4-5-20251101',
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: prompt }],
-      });
-    });
-
-    const content = response.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type');
-    }
-
-    // Parse JSON from response
-    const jsonMatch = content.text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      console.log(`No JSON array found in Claude response for ${platform}/@${handle}`);
-      return { flaggedPosts: [], brandResults, keywordResults };
-    }
-
-    const flaggedPosts: Array<{
-      postId: string;
-      concerns: string[];
-      severity: 'low' | 'medium' | 'high' | 'critical';
-      reason: string;
-    }> = JSON.parse(jsonMatch[0]);
-
-    // Enrich flagged posts with full post data
-    const enrichedFlaggedPosts = flaggedPosts.map((flagged) => {
-      const originalPost = posts.find((p) => p.id === flagged.postId);
+  // Convert vetting decisions to flagged posts format
+  const flaggedPosts: FlaggedPost[] = vettingResult.decisions
+    .filter((d) => d.isConfirmedRisk)
+    .map((decision) => {
+      const originalPost = posts.find((p) => p.id === decision.postId);
       return {
-        postId: flagged.postId,
+        postId: decision.postId,
         caption: originalPost?.caption || '',
         permalink: originalPost?.permalink || '',
         timestamp: originalPost?.timestamp || '',
-        concerns: flagged.concerns,
-        severity: flagged.severity,
-        reason: flagged.reason,
+        concerns: decision.concerns,
+        severity: decision.severity,
+        reason: decision.reason,
+        mediaUrl: originalPost?.mediaUrl,
+        thumbnailUrl: originalPost?.thumbnailUrl,
+        mediaType: originalPost?.mediaType,
       };
     });
 
-    return {
-      flaggedPosts: enrichedFlaggedPosts,
-      brandResults,
-      keywordResults,
-    };
-  } catch (error) {
-    console.error(`Social media analysis failed for ${platform}/@${handle}:`, error);
-    return { flaggedPosts: [], brandResults, keywordResults };
-  }
+  return {
+    flaggedPosts,
+    screeningResults,
+    vettingResult,
+    keywordResults,
+  };
 }
 
 /**
@@ -342,37 +153,26 @@ function calculateOverallRisk(
 }
 
 /**
- * Generate enhanced summary of social media analysis
+ * Generate summary of social media analysis (simplified for two-tier flow)
  */
 function generateSummary(
   platform: string,
   handle: string,
   totalPosts: number,
   flaggedPosts: FlaggedPost[],
-  brandResults?: Map<string, BrandDetectionResult>,
-  keywordResults?: Map<string, KeywordDetectionResult>
+  keywordResults?: Map<string, KeywordDetectionResult>,
+  vettingRecommendation?: string
 ): string {
   const parts: string[] = [];
 
   // Basic analysis summary
   parts.push(`Analyzed ${totalPosts} ${platform} posts for @${handle}.`);
 
-  // Brand detection summary
-  if (brandResults && brandResults.size > 0) {
-    const brandAggregated = aggregateBrands(brandResults);
-    if (brandAggregated.allBrands.length > 0) {
-      parts.push(`Detected ${brandAggregated.allBrands.length} brand(s) mentioned.`);
-      if (brandAggregated.hasAds) {
-        parts.push(`Sponsored content detected.`);
-      }
-    }
-  }
-
   // Keyword detection summary
   if (keywordResults && keywordResults.size > 0) {
     const keywordAggregated = aggregateKeywordResults(keywordResults);
     if (keywordAggregated.allFlaggedTerms.length > 0) {
-      parts.push(`${keywordAggregated.allFlaggedTerms.length} keyword flag(s) found (${keywordAggregated.overallRisk} risk).`);
+      parts.push(`${keywordAggregated.allFlaggedTerms.length} keyword flag(s) found.`);
     }
   }
 
@@ -396,12 +196,17 @@ function generateSummary(
     parts.push(concernParts.join(' '));
   }
 
+  // Add vetting recommendation if available
+  if (vettingRecommendation) {
+    parts.push(`Recommendation: ${vettingRecommendation}.`);
+  }
+
   return parts.join(' ');
 }
 
 /**
  * Main function to analyze all social media content
- * Enhanced with brand detection and keyword detection
+ * Uses two-tier flow: Haiku screening + Opus vetting
  */
 export async function analyzeSocialMediaContent(
   content: SocialMediaContent[],
@@ -416,67 +221,54 @@ export async function analyzeSocialMediaContent(
     }
 
     console.log(
-      `Analyzing ${source.posts.length} ${source.platform} posts for @${source.handle}`
+      `\n========================================\n` +
+      `Analyzing ${source.posts.length} ${source.platform} posts for @${source.handle}\n` +
+      `========================================`
     );
 
-    // Track all results across batches
-    const allFlaggedPosts: FlaggedPost[] = [];
-    const allBrandResults = new Map<string, BrandDetectionResult>();
-    const allKeywordResults = new Map<string, KeywordDetectionResult>();
-
-    // Analyze posts in batches to avoid token limits
-    for (let i = 0; i < source.posts.length; i += CONFIG.MAX_POSTS_PER_BATCH) {
-      const batch = source.posts.slice(i, i + CONFIG.MAX_POSTS_PER_BATCH);
-      const result = await analyzePostsBatch(
-        batch,
-        source.platform,
-        source.handle,
-        creatorName
-      );
-
-      // Aggregate results from batch
-      allFlaggedPosts.push(...result.flaggedPosts);
-      for (const [id, brandResult] of result.brandResults) {
-        allBrandResults.set(id, brandResult);
-      }
-      for (const [id, keywordResult] of result.keywordResults) {
-        allKeywordResults.set(id, keywordResult);
-      }
-    }
+    // Run two-tier analysis (handles batching internally)
+    const result = await analyzePlatformContent(
+      source.posts,
+      source.platform,
+      source.handle,
+      creatorName
+    );
 
     // Calculate transcript coverage for logging
     const postsWithTranscripts = source.posts.filter(
       (p) => p.transcript && p.transcript.trim().length > 0
     ).length;
 
+    // Use vetting result's overall risk and recommendation
     const analysis: SocialMediaAnalysis = {
       platform: source.platform,
       handle: source.handle,
-      flaggedPosts: allFlaggedPosts,
-      overallRisk: calculateOverallRisk(allFlaggedPosts),
-      summary: generateSummary(
+      flaggedPosts: result.flaggedPosts,
+      overallRisk: result.vettingResult.overallRisk,
+      summary: result.vettingResult.summary || generateSummary(
         source.platform,
         source.handle,
         source.posts.length,
-        allFlaggedPosts,
-        allBrandResults,
-        allKeywordResults
+        result.flaggedPosts,
+        result.keywordResults,
+        result.vettingResult.recommendation
       ),
     };
 
     analyses.push(analysis);
 
     // Enhanced logging
-    const brandAggregated = aggregateBrands(allBrandResults);
-    const keywordAggregated = aggregateKeywordResults(allKeywordResults);
+    const keywordAggregated = aggregateKeywordResults(result.keywordResults);
+    const screenedCount = result.screeningResults.filter(r => r.requiresSeniorReview).length;
 
     console.log(
-      `${source.platform}/@${source.handle}: ` +
-        `${allFlaggedPosts.length} flagged posts, ` +
-        `risk: ${analysis.overallRisk}, ` +
-        `${postsWithTranscripts}/${source.posts.length} with transcripts, ` +
-        `${brandAggregated.allBrands.length} brands detected, ` +
-        `${keywordAggregated.allFlaggedTerms.length} keyword flags`
+      `\n[Summary] ${source.platform}/@${source.handle}:\n` +
+        `  → ${source.posts.length} posts analyzed (${postsWithTranscripts} with transcripts)\n` +
+        `  → ${keywordAggregated.allFlaggedTerms.length} keyword flags (local detection)\n` +
+        `  → ${screenedCount} posts sent to senior review (Haiku screening)\n` +
+        `  → ${result.flaggedPosts.length} confirmed risks (Opus vetting)\n` +
+        `  → Overall risk: ${analysis.overallRisk}\n` +
+        `  → Recommendation: ${result.vettingResult.recommendation}`
     );
   }
 
@@ -512,6 +304,9 @@ export function convertAnalysisToFindings(
           platform: analysis.platform,
           handle: analysis.handle,
           postId: flagged.postId,
+          mediaUrl: flagged.mediaUrl,
+          thumbnailUrl: flagged.thumbnailUrl,
+          mediaType: flagged.mediaType,
         },
       };
 

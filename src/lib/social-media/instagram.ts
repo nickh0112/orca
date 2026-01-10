@@ -3,6 +3,7 @@ import {
   InstagramGraphResponse,
   SocialMediaContent,
   SocialMediaPost,
+  MediaType,
 } from '@/types/social-media';
 import { transcribeFromUrl } from '@/lib/transcription';
 
@@ -124,6 +125,20 @@ async function fetchInstagramPosts(
 }
 
 /**
+ * Map Instagram media_type to our MediaType
+ */
+function mapMediaType(mediaType: string): MediaType {
+  switch (mediaType) {
+    case 'VIDEO':
+      return 'video';
+    case 'CAROUSEL_ALBUM':
+      return 'carousel';
+    default:
+      return 'image';
+  }
+}
+
+/**
  * Convert Instagram posts to unified SocialMediaPost format
  */
 function convertToSocialMediaPosts(posts: InstagramPost[]): SocialMediaPost[] {
@@ -136,6 +151,9 @@ function convertToSocialMediaPosts(posts: InstagramPost[]): SocialMediaPost[] {
       likes: post.like_count,
       comments: post.comments_count,
     },
+    mediaUrl: post.media_url,
+    thumbnailUrl: post.media_url, // Instagram uses same URL for thumbnail
+    mediaType: mapMediaType(post.media_type),
   }));
 }
 

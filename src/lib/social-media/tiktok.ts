@@ -140,6 +140,9 @@ function convertToSocialMediaPosts(
       views: post.video_views,
       shares: post.shares,
     },
+    mediaUrl: post.media_url,
+    thumbnailUrl: post.thumbnail_url,
+    mediaType: 'video' as const,
   }));
 }
 

@@ -41,6 +41,9 @@ export interface Finding {
       views?: number;
       shares?: number;
     };
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    mediaType?: 'image' | 'video' | 'carousel';
   };
 }
 

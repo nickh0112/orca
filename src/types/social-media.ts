@@ -38,6 +38,8 @@ export interface YouTubeVideo {
 
 // Unified types for internal use
 
+export type MediaType = 'image' | 'video' | 'carousel';
+
 export interface SocialMediaPost {
   id: string;
   caption: string;
@@ -50,6 +52,9 @@ export interface SocialMediaPost {
     views?: number;
     shares?: number;
   };
+  mediaUrl?: string;       // Direct image/video URL
+  thumbnailUrl?: string;   // Thumbnail for videos
+  mediaType?: MediaType;
 }
 
 // Brand detection types
@@ -101,6 +106,9 @@ export interface FlaggedPost {
   concerns: string[];
   severity: 'low' | 'medium' | 'high' | 'critical';
   reason: string;
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  mediaType?: MediaType;
 }
 
 export interface SocialMediaAnalysis {

@@ -137,9 +137,11 @@ Format:
 ]`;
 
   try {
+    // Use Haiku for cost-effective brand detection
+    // Sponsorship determination is now handled by the Opus vetting agent
     const response = await withRetry(async () => {
       return await anthropic.messages.create({
-        model: 'claude-opus-4-5-20251101',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 2048,
         messages: [{ role: 'user', content: prompt }],
       });

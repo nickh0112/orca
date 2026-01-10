@@ -263,6 +263,9 @@ function convertToSocialMediaPosts(
       // YouTube API doesn't return engagement stats in snippet
       // Would need statistics part for that
     },
+    // YouTube thumbnails can be constructed from video ID
+    thumbnailUrl: `https://img.youtube.com/vi/${video.id}/maxresdefault.jpg`,
+    mediaType: 'video' as const,
   }));
 }
 
