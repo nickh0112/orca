@@ -1,0 +1,169 @@
+{
+  "common": {
+    "loading": "Wird geladen...",
+    "error": "Ein Fehler ist aufgetreten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "back": "Zurück",
+    "viewAll": "Alle anzeigen",
+    "export": "Exportieren",
+    "retry": "Erneut versuchen",
+    "clear": "Alle löschen",
+    "add": "Hinzufügen",
+    "remove": "Entfernen",
+    "or": "oder"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "batches": "Stapel",
+    "new": "Neu"
+  },
+  "dashboard": {
+    "teamTitle": "Team-Dashboard",
+    "personalTitle": "Meine Leistung",
+    "subtitle": "Übersicht zur Creator-Prüfung",
+    "creatorsVetted": "Geprüfte Creator",
+    "batchesThisMonth": "Stapel diesen Monat",
+    "avgRiskLevel": "Durchschn. Risikostufe",
+    "successRate": "Erfolgsquote",
+    "teamActivity": "Team-Aktivität",
+    "recentBatches": "Aktuelle Stapel",
+    "myRecentBatches": "Meine aktuellen Stapel",
+    "noBatches": "Noch keine Stapel",
+    "createNewBatch": "+ Neuen Stapel erstellen",
+    "team": "Team",
+    "personal": "Persönlich",
+    "batches": "Stapel",
+    "creators": "Creator",
+    "failedToLoad": "Dashboard konnte nicht geladen werden"
+  },
+  "risk": {
+    "low": "Niedrig",
+    "medium": "Mittel",
+    "high": "Hoch",
+    "critical": "Kritisch",
+    "unknown": "Unbekannt"
+  },
+  "verdict": {
+    "approve": "genehmigen",
+    "review": "prüfen",
+    "pending": "ausstehend"
+  },
+  "batches": {
+    "title": "Alle Stapel",
+    "myTitle": "Meine Stapel",
+    "subtitle": "{count, plural, one {# Stapel} other {# Stapel}}",
+    "createNew": "+ Neuen Stapel erstellen",
+    "createFirst": "+ Ersten Stapel erstellen",
+    "noBatches": "Noch keine Stapel",
+    "noBatchesFound": "Keine Stapel gefunden",
+    "mine": "Meine",
+    "all": "Alle",
+    "creators": "{count, plural, one {# Creator} other {# Creator}}",
+    "toReview": "zur Prüfung",
+    "notFound": "Stapel nicht gefunden",
+    "backToBatches": "Zurück zu Stapeln"
+  },
+  "batchDetail": {
+    "startResearch": "Recherche starten",
+    "starting": "Wird gestartet...",
+    "researchComplete": "Recherche abgeschlossen",
+    "processed": "{completed} von {total} verarbeitet",
+    "failed": "{count} fehlgeschlagen",
+    "processing": "wird verarbeitet",
+    "completed": "abgeschlossen"
+  },
+  "newBatch": {
+    "title": "Neuer Stapel",
+    "subtitle": "Erstellen Sie einen Recherche-Stapel zur Creator-Prüfung",
+    "batchDetails": "Stapeldetails",
+    "batchName": "Stapelname",
+    "batchNamePlaceholder": "z.B. Q1 2025 Kampagne",
+    "client": "Kunde",
+    "clientOptional": "(optional)",
+    "clientPlaceholder": "z.B. Nike, Coca-Cola",
+    "addCreators": "Creator hinzufügen",
+    "addManually": "Einzelnen Creator manuell hinzufügen",
+    "creatorsCount": "Creator ({count})",
+    "links": "{count, plural, one {# Link} other {# Links}}",
+    "advancedOptions": "Erweiterte Optionen",
+    "brandPartnershipAnalysis": "Markenpartnerschaft-Analyse",
+    "timeRange": "Zeitraum",
+    "last3Months": "Letzte 3 Monate",
+    "last6Months": "Letzte 6 Monate (Standard)",
+    "last12Months": "Letzte 12 Monate",
+    "last24Months": "Letzte 24 Monate",
+    "last36Months": "Letzte 36 Monate (3 Jahre)",
+    "timeRangeHelp": "Wie weit zurück Creator-Inhalte analysiert werden",
+    "clientBrand": "Kundenmarke",
+    "clientBrandHelp": "KI identifiziert Wettbewerber und markiert Partnerschaften",
+    "customSearchTerms": "Benutzerdefinierte Suchbegriffe",
+    "customSearchTermsHelp": "Fügen Sie benutzerdefinierte Suchbegriffe hinzu (Klage, Skandal, Kontroverse, usw.)",
+    "createBatch": "Stapel erstellen",
+    "creating": "Wird erstellt...",
+    "errorBatchName": "Bitte geben Sie einen Stapelnamen ein",
+    "errorNoCreators": "Bitte fügen Sie mindestens einen Creator hinzu"
+  },
+  "creatorReport": {
+    "backToSummary": "← zurück zur Zusammenfassung",
+    "posts": "Beiträge",
+    "brands": "Marken",
+    "findings": "Ergebnisse",
+    "noPosts": "Keine Beiträge gefunden",
+    "noPostsFilter": "Keine {filter} Beiträge gefunden",
+    "filters": {
+      "all": "alle",
+      "flagged": "markiert",
+      "instagram": "Instagram",
+      "youtube": "YouTube",
+      "tiktok": "TikTok"
+    },
+    "verdict": "Bewertung",
+    "brandPartnerships": "Markenpartnerschaften",
+    "competitor": "(Wettbewerber)",
+    "more": "+{count} weitere",
+    "socialProfiles": "Soziale Profile",
+    "researchFindings": "Recherche-Ergebnisse",
+    "riskBreakdown": "Risikoaufteilung",
+    "viewSource": "Quelle anzeigen",
+    "creatorNotFound": "Creator nicht gefunden",
+    "backToBatch": "Zurück zum Stapel"
+  },
+  "bulkImport": {
+    "pasteFromSpreadsheet": "Aus Tabelle einfügen",
+    "pasteInstructions": "Kopieren Sie Zeilen aus Excel, Google Sheets oder einer anderen Tabelle und fügen Sie sie hier ein",
+    "uploadCsv": "CSV-Datei hochladen",
+    "expectedColumns": "Erwartete Spalten: Name (erforderlich), dann beliebige Social-Links (Instagram, YouTube, TikTok URLs oder @Handles)",
+    "ready": "bereit",
+    "warnings": "Warnungen",
+    "errors": "Fehler",
+    "addCreators": "{count} Creator hinzufügen",
+    "enterSocialLink": "Social-Link oder @Handle eingeben:"
+  },
+  "creatorForm": {
+    "creatorName": "Creator-Name",
+    "creatorNamePlaceholder": "Max Mustermann",
+    "socialLinks": "Social-Media-Links",
+    "addLink": "Link hinzufügen",
+    "addCreator": "Creator hinzufügen"
+  },
+  "csvUpload": {
+    "dragAndDrop": "CSV-Datei hierher ziehen oder klicken zum Durchsuchen",
+    "columnsHelp": "Spalten: Name, Instagram, Twitter, YouTube, TikTok"
+  },
+  "emailPrompt": {
+    "welcome": "Willkommen bei Orca",
+    "enterEmail": "Geben Sie Ihre E-Mail ein, um zu beginnen",
+    "emailHelp": "Dies hilft bei der Organisation von Berichten nach Teammitglied",
+    "continue": "Weiter"
+  },
+  "userHeader": {
+    "switchUser": "Benutzer wechseln"
+  },
+  "batchProgress": {
+    "processing": "Wird verarbeitet...",
+    "of": "von",
+    "completed": "abgeschlossen",
+    "failed": "fehlgeschlagen"
+  }
+}

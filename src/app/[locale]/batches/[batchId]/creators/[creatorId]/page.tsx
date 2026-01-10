@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, use } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
 import { cn, getPlatformFromUrl } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { generateCreatorPdf } from '@/components/report/creator-pdf';
@@ -79,6 +80,11 @@ export default function CreatorReportPage({
   const [isExporting, setIsExporting] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+
+  const t = useTranslations('creatorReport');
+  const tRisk = useTranslations('risk');
+  const tVerdict = useTranslations('verdict');
+  const locale = useLocale();
 
   useEffect(() => {
     fetch(`/api/creators/${creatorId}`)
@@ -183,13 +189,13 @@ export default function CreatorReportPage({
     switch (riskLevel) {
       case 'CRITICAL':
       case 'HIGH':
-        return { action: 'review', color: 'text-red-500' };
+        return { action: tVerdict('review'), color: 'text-red-500' };
       case 'MEDIUM':
-        return { action: 'review', color: 'text-amber-500' };
+        return { action: tVerdict('review'), color: 'text-amber-500' };
       case 'LOW':
-        return { action: 'approve', color: 'text-emerald-500' };
+        return { action: tVerdict('approve'), color: 'text-emerald-500' };
       default:
-        return { action: 'review', color: 'text-zinc-500' };
+        return { action: tVerdict('review'), color: 'text-zinc-500' };
     }
   };
 
@@ -205,12 +211,12 @@ export default function CreatorReportPage({
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-zinc-400 mb-4">Creator not found</p>
+          <p className="text-zinc-400 mb-4">{t('creatorNotFound')}</p>
           <Link
-            href={`/batches/${batchId}`}
+            href={`/${locale}/batches/${batchId}`}
             className="text-zinc-300 hover:text-white"
           >
-            Back to batch
+            {t('backToBatch')}
           </Link>
         </div>
       </div>
@@ -227,7 +233,7 @@ export default function CreatorReportPage({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link
-              href={`/batches/${batchId}`}
+              href={`/${locale}/batches/${batchId}`}
               className="text-zinc-500 hover:text-zinc-300 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -235,7 +241,7 @@ export default function CreatorReportPage({
             <div>
               <h1 className="text-zinc-200 font-light tracking-wide">{creator.name}</h1>
               <p className="text-zinc-600 text-sm">
-                {socialFindings.length} posts · {brandPartnerships.length} brands · {webFindings.length} findings
+                {socialFindings.length} {t('posts')} · {brandPartnerships.length} {t('brands')} · {webFindings.length} {t('findings')}
               </p>
             </div>
           </div>
@@ -283,7 +289,7 @@ export default function CreatorReportPage({
                     filter === f ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-400'
                   )}
                 >
-                  {f}
+                  {t(`filters.${f}`)}
                 </button>
               ))}
             </div>
@@ -337,7 +343,9 @@ export default function CreatorReportPage({
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-zinc-600 text-sm">No {filter === 'all' ? '' : filter} posts found</p>
+                <p className="text-zinc-600 text-sm">
+                  {filter === 'all' ? t('noPosts') : t('noPostsFilter', { filter: t(`filters.${filter}`) })}
+                </p>
               </div>
             )}
           </div>
@@ -352,7 +360,7 @@ export default function CreatorReportPage({
                 onClick={() => setSelectedFinding(null)}
                 className="text-zinc-600 hover:text-zinc-400 text-sm mb-6 transition-colors"
               >
-                ← back to summary
+                {t('backToSummary')}
               </button>
 
               <div className="space-y-8">
@@ -371,7 +379,7 @@ export default function CreatorReportPage({
                       selectedFinding.severity === 'medium' && 'text-amber-500',
                       selectedFinding.severity === 'low' && 'text-emerald-500',
                     )}>
-                      {selectedFinding.severity}
+                      {tRisk(selectedFinding.severity)}
                     </span>
                   </div>
                   <h2 className="text-zinc-200 font-light">{selectedFinding.title}</h2>
@@ -390,7 +398,7 @@ export default function CreatorReportPage({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
                 >
-                  View source
+                  {t('viewSource')}
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -400,7 +408,7 @@ export default function CreatorReportPage({
             <div className="p-8 space-y-10">
               {/* Verdict */}
               <div>
-                <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">Verdict</p>
+                <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">{t('verdict')}</p>
                 {recommendation && (
                   <span className={cn(
                     'text-lg uppercase tracking-wider',
@@ -420,7 +428,7 @@ export default function CreatorReportPage({
               {brandPartnerships.length > 0 && (
                 <div>
                   <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">
-                    Brand Partnerships ({brandPartnerships.length})
+                    {t('brandPartnerships')} ({brandPartnerships.length})
                   </p>
                   <div className="space-y-2">
                     {brandPartnerships.slice(0, 10).map((brand, i) => (
@@ -430,13 +438,13 @@ export default function CreatorReportPage({
                           brand.isCompetitor ? 'text-red-400' : 'text-zinc-300'
                         )}>
                           {brand.brandName}
-                          {brand.isCompetitor && ' (competitor)'}
+                          {brand.isCompetitor && ` ${t('competitor')}`}
                         </span>
                         <span className="text-zinc-600 text-xs">{brand.platform}</span>
                       </div>
                     ))}
                     {brandPartnerships.length > 10 && (
-                      <p className="text-zinc-600 text-xs">+{brandPartnerships.length - 10} more</p>
+                      <p className="text-zinc-600 text-xs">{t('more', { count: brandPartnerships.length - 10 })}</p>
                     )}
                   </div>
                 </div>
@@ -446,7 +454,7 @@ export default function CreatorReportPage({
               {creator.socialLinks?.length > 0 && (
                 <div>
                   <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">
-                    Social Profiles
+                    {t('socialProfiles')}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {(creator.socialLinks || []).map((link, i) => (
@@ -469,7 +477,7 @@ export default function CreatorReportPage({
               {webFindings.length > 0 && (
                 <div>
                   <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">
-                    Research Findings ({webFindings.length})
+                    {t('researchFindings')} ({webFindings.length})
                   </p>
                   <div className="space-y-4">
                     {webFindings.map((finding, idx) => (
@@ -513,23 +521,23 @@ export default function CreatorReportPage({
               {/* Risk Breakdown */}
               {report && (
                 <div>
-                  <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">Risk Breakdown</p>
+                  <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">{t('riskBreakdown')}</p>
                   <div className="flex items-center gap-6">
                     <div>
                       <span className="text-xl text-red-500 font-light">{stats.critical}</span>
-                      <span className="text-zinc-600 text-sm ml-1">critical</span>
+                      <span className="text-zinc-600 text-sm ml-1">{tRisk('critical').toLowerCase()}</span>
                     </div>
                     <div>
                       <span className="text-xl text-orange-500 font-light">{stats.high}</span>
-                      <span className="text-zinc-600 text-sm ml-1">high</span>
+                      <span className="text-zinc-600 text-sm ml-1">{tRisk('high').toLowerCase()}</span>
                     </div>
                     <div>
                       <span className="text-xl text-amber-500 font-light">{stats.medium}</span>
-                      <span className="text-zinc-600 text-sm ml-1">med</span>
+                      <span className="text-zinc-600 text-sm ml-1">{tRisk('medium').toLowerCase().slice(0, 3)}</span>
                     </div>
                     <div>
                       <span className="text-xl text-zinc-500 font-light">{stats.low}</span>
-                      <span className="text-zinc-600 text-sm ml-1">low</span>
+                      <span className="text-zinc-600 text-sm ml-1">{tRisk('low').toLowerCase()}</span>
                     </div>
                   </div>
                 </div>

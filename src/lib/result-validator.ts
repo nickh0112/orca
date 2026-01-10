@@ -311,10 +311,15 @@ export async function validateResults(
 export async function generateRationale(
   findings: Finding[],
   creatorName: string,
-  socialLinks: string[]
+  socialLinks: string[],
+  language: string = 'en'
 ): Promise<string> {
+  const isGerman = language === 'de';
+
   if (findings.length === 0) {
-    return 'No significant brand safety concerns were identified for this creator. The search returned no relevant findings related to controversies, legal issues, or other risk factors.';
+    return isGerman
+      ? 'Für diesen Creator wurden keine signifikanten Markenrisiken identifiziert. Die Suche ergab keine relevanten Ergebnisse zu Kontroversen, rechtlichen Problemen oder anderen Risikofaktoren.'
+      : 'No significant brand safety concerns were identified for this creator. The search returned no relevant findings related to controversies, legal issues, or other risk factors.';
   }
 
   const handlesStr = socialLinks
@@ -334,7 +339,15 @@ export async function generateRationale(
    ${f.validation?.reason ? `- Note: ${f.validation.reason}` : ''}`;
   }).join('\n\n');
 
-  const prompt = `You are a brand safety analyst helping evaluate a content creator for potential partnership.
+  const languageInstruction = isGerman
+    ? 'WICHTIG: Antworte vollständig auf Deutsch.\n\n'
+    : '';
+
+  const headings = isGerman
+    ? { summary: 'Zusammenfassung', concerns: 'Hauptbedenken', notes: 'Vertrauenshinweise', recommendation: 'Empfehlung' }
+    : { summary: 'Summary', concerns: 'Key Concerns', notes: 'Confidence Notes', recommendation: 'Recommendation' };
+
+  const prompt = `${languageInstruction}You are a brand safety analyst helping evaluate a content creator for potential partnership.
 
 CREATOR INFO:
 - Name: ${creatorName}
@@ -345,16 +358,16 @@ ${findingsSummary}
 
 Please provide a concise analysis in this exact format:
 
-## Summary
+## ${headings.summary}
 [2-3 sentences summarizing the overall risk profile]
 
-## Key Concerns
+## ${headings.concerns}
 [Bullet points of the most significant issues, if any. Focus on high/critical severity items]
 
-## Confidence Notes
+## ${headings.notes}
 [Flag any findings that may be about a different person with a similar name, or seem irrelevant to brand safety. Be specific about which findings are questionable]
 
-## Recommendation
+## ${headings.recommendation}
 [One sentence recommendation: proceed with caution, recommend further review, or safe to proceed]`;
 
   try {
@@ -379,16 +392,30 @@ Please provide a concise analysis in this exact format:
     const highCount = findings.filter(f => f.severity === 'high').length;
     const uncertainCount = findings.filter(f => f.validation?.isSamePerson === 'uncertain').length;
 
-    return `## Summary
+    if (isGerman) {
+      return `## ${headings.summary}
+${findings.length} potenzielle Bedenken für ${creatorName} gefunden. ${criticalCount > 0 ? `${criticalCount} kritische(s) Problem(e) erfordern sofortige Aufmerksamkeit. ` : ''}${highCount > 0 ? `${highCount} Ergebnis(se) mit hohem Schweregrad erkannt. ` : ''}Manuelle Überprüfung empfohlen.
+
+## ${headings.concerns}
+${criticalCount > 0 || highCount > 0 ? '- Kritische und schwerwiegende Ergebnisse sorgfältig prüfen' : '- Keine kritischen Probleme identifiziert'}
+
+## ${headings.notes}
+${uncertainCount > 0 ? `- ${uncertainCount} Ergebnis(se) mit unsicherer Personenzuordnung - manuell überprüfen` : '- Alle Ergebnisse scheinen dem Creator zuzuordnen zu sein'}
+
+## ${headings.recommendation}
+${criticalCount > 0 ? 'Mit erheblicher Vorsicht vorgehen - kritische Probleme vorhanden.' : highCount > 0 ? 'Weitere Überprüfung vor dem Fortfahren empfohlen.' : 'Niedrigeres Risikoprofil - Standardüberprüfung empfohlen.'}`;
+    }
+
+    return `## ${headings.summary}
 Found ${findings.length} potential concerns for ${creatorName}. ${criticalCount > 0 ? `${criticalCount} critical issue(s) require immediate attention. ` : ''}${highCount > 0 ? `${highCount} high-severity finding(s) detected. ` : ''}Manual review recommended.
 
-## Key Concerns
+## ${headings.concerns}
 ${criticalCount > 0 || highCount > 0 ? '- Review critical and high severity findings carefully' : '- No critical issues identified'}
 
-## Confidence Notes
+## ${headings.notes}
 ${uncertainCount > 0 ? `- ${uncertainCount} finding(s) have uncertain person matching - verify these manually` : '- All findings appear to match the creator'}
 
-## Recommendation
+## ${headings.recommendation}
 ${criticalCount > 0 ? 'Proceed with significant caution - critical issues present.' : highCount > 0 ? 'Recommend further review before proceeding.' : 'Lower risk profile - standard review recommended.'}`;
   }
 }

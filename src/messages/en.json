@@ -1,0 +1,169 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "save": "Save",
+    "cancel": "Cancel",
+    "back": "Back",
+    "viewAll": "View all",
+    "export": "Export",
+    "retry": "Retry",
+    "clear": "Clear all",
+    "add": "Add",
+    "remove": "Remove",
+    "or": "or"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "batches": "Batches",
+    "new": "New"
+  },
+  "dashboard": {
+    "teamTitle": "Team Dashboard",
+    "personalTitle": "My Performance",
+    "subtitle": "Creator vetting overview",
+    "creatorsVetted": "Creators Vetted",
+    "batchesThisMonth": "Batches This Month",
+    "avgRiskLevel": "Avg Risk Level",
+    "successRate": "Success Rate",
+    "teamActivity": "Team Activity",
+    "recentBatches": "Recent Batches",
+    "myRecentBatches": "My Recent Batches",
+    "noBatches": "No batches yet",
+    "createNewBatch": "+ Create new batch",
+    "team": "Team",
+    "personal": "Personal",
+    "batches": "batches",
+    "creators": "creators",
+    "failedToLoad": "Failed to load dashboard"
+  },
+  "risk": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "critical": "Critical",
+    "unknown": "Unknown"
+  },
+  "verdict": {
+    "approve": "approve",
+    "review": "review",
+    "pending": "pending"
+  },
+  "batches": {
+    "title": "All Batches",
+    "myTitle": "My Batches",
+    "subtitle": "{count, plural, one {# batch} other {# batches}}",
+    "createNew": "+ Create new batch",
+    "createFirst": "+ Create your first batch",
+    "noBatches": "No batches yet",
+    "noBatchesFound": "No batches found",
+    "mine": "Mine",
+    "all": "All",
+    "creators": "{count, plural, one {# creator} other {# creators}}",
+    "toReview": "to review",
+    "notFound": "Batch not found",
+    "backToBatches": "Back to batches"
+  },
+  "batchDetail": {
+    "startResearch": "Start Research",
+    "starting": "Starting...",
+    "researchComplete": "Research complete",
+    "processed": "{completed} of {total} processed",
+    "failed": "{count} failed",
+    "processing": "processing",
+    "completed": "completed"
+  },
+  "newBatch": {
+    "title": "New Batch",
+    "subtitle": "Create a research batch for creator vetting",
+    "batchDetails": "Batch Details",
+    "batchName": "Batch Name",
+    "batchNamePlaceholder": "e.g., Q1 2025 Campaign",
+    "client": "Client",
+    "clientOptional": "(optional)",
+    "clientPlaceholder": "e.g., Nike, Coca-Cola",
+    "addCreators": "Add Creators",
+    "addManually": "Add single creator manually",
+    "creatorsCount": "Creators ({count})",
+    "links": "{count, plural, one {# link} other {# links}}",
+    "advancedOptions": "Advanced options",
+    "brandPartnershipAnalysis": "Brand Partnership Analysis",
+    "timeRange": "Time Range",
+    "last3Months": "Last 3 months",
+    "last6Months": "Last 6 months (default)",
+    "last12Months": "Last 12 months",
+    "last24Months": "Last 24 months",
+    "last36Months": "Last 36 months (3 years)",
+    "timeRangeHelp": "How far back to analyze creator content",
+    "clientBrand": "Client Brand",
+    "clientBrandHelp": "AI will identify competitors and flag partnerships",
+    "customSearchTerms": "Custom Search Terms",
+    "customSearchTermsHelp": "Add custom search terms beyond the defaults (lawsuit, scandal, controversy, etc.)",
+    "createBatch": "Create Batch",
+    "creating": "Creating...",
+    "errorBatchName": "Please enter a batch name",
+    "errorNoCreators": "Please add at least one creator"
+  },
+  "creatorReport": {
+    "backToSummary": "← back to summary",
+    "posts": "posts",
+    "brands": "brands",
+    "findings": "findings",
+    "noPosts": "No posts found",
+    "noPostsFilter": "No {filter} posts found",
+    "filters": {
+      "all": "all",
+      "flagged": "flagged",
+      "instagram": "instagram",
+      "youtube": "youtube",
+      "tiktok": "tiktok"
+    },
+    "verdict": "Verdict",
+    "brandPartnerships": "Brand Partnerships",
+    "competitor": "(competitor)",
+    "more": "+{count} more",
+    "socialProfiles": "Social Profiles",
+    "researchFindings": "Research Findings",
+    "riskBreakdown": "Risk Breakdown",
+    "viewSource": "View source",
+    "creatorNotFound": "Creator not found",
+    "backToBatch": "Back to batch"
+  },
+  "bulkImport": {
+    "pasteFromSpreadsheet": "Paste from spreadsheet",
+    "pasteInstructions": "Copy rows from Excel, Google Sheets, or any spreadsheet and paste here",
+    "uploadCsv": "Upload CSV file",
+    "expectedColumns": "Expected columns: name (required), then any social links (instagram, youtube, tiktok URLs or @handles)",
+    "ready": "ready",
+    "warnings": "warnings",
+    "errors": "errors",
+    "addCreators": "Add {count} creators",
+    "enterSocialLink": "Enter social link or @handle:"
+  },
+  "creatorForm": {
+    "creatorName": "Creator Name",
+    "creatorNamePlaceholder": "John Doe",
+    "socialLinks": "Social Media Links",
+    "addLink": "Add Link",
+    "addCreator": "Add Creator"
+  },
+  "csvUpload": {
+    "dragAndDrop": "Drag and drop a CSV file, or click to browse",
+    "columnsHelp": "Columns: name, instagram, twitter, youtube, tiktok"
+  },
+  "emailPrompt": {
+    "welcome": "Welcome to Orca",
+    "enterEmail": "Enter your email to get started",
+    "emailHelp": "This helps organize reports by team member",
+    "continue": "Continue"
+  },
+  "userHeader": {
+    "switchUser": "Switch User"
+  },
+  "batchProgress": {
+    "processing": "Processing...",
+    "of": "of",
+    "completed": "completed",
+    "failed": "failed"
+  }
+}

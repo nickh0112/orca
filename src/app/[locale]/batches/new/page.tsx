@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
 import { BulkImport } from '@/components/forms/bulk-import';
 import { CreatorForm } from '@/components/forms/creator-form';
 import { SearchTermsInput } from '@/components/forms/search-terms-input';
@@ -16,6 +17,11 @@ import type { CreatorInput } from '@/lib/validators';
 export default function NewBatchPage() {
   const router = useRouter();
   const { email: userEmail } = useUserEmail();
+  const t = useTranslations('newBatch');
+  const tCommon = useTranslations('common');
+  const tNav = useTranslations('nav');
+  const locale = useLocale();
+
   const [batchName, setBatchName] = useState('');
   const [clientName, setClientName] = useState('');
   const [creators, setCreators] = useState<CreatorInput[]>([]);
@@ -41,11 +47,11 @@ export default function NewBatchPage() {
 
   const handleSubmit = async () => {
     if (!batchName.trim()) {
-      setError('Please enter a batch name');
+      setError(t('errorBatchName'));
       return;
     }
     if (creators.length === 0) {
-      setError('Please add at least one creator');
+      setError(t('errorNoCreators'));
       return;
     }
 
@@ -63,6 +69,7 @@ export default function NewBatchPage() {
           clientName: clientName.trim() || undefined,
           monthsBack: monthsBack !== 6 ? monthsBack : undefined,
           clientBrand: clientBrand.trim() || undefined,
+          language: locale,
           creators,
         }),
       });
@@ -73,7 +80,7 @@ export default function NewBatchPage() {
       }
 
       const batch = await response.json();
-      router.push(`/batches/${batch.id}`);
+      router.push(`/${locale}/batches/${batch.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create batch');
     } finally {
@@ -85,43 +92,43 @@ export default function NewBatchPage() {
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-4xl mx-auto px-8 py-16">
         <Link
-          href="/"
+          href={`/${locale}`}
           className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 mb-12 text-sm tracking-wide"
         >
           <ArrowLeft className="w-4 h-4" />
-          dashboard
+          {tNav('dashboard').toLowerCase()}
         </Link>
 
         <div className="mb-16">
           <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">
-            New Batch
+            {t('title')}
           </h1>
-          <p className="text-zinc-600 text-sm">Create a research batch for creator vetting</p>
+          <p className="text-zinc-600 text-sm">{t('subtitle')}</p>
         </div>
 
         {/* Batch Details */}
         <div className="pb-10 mb-10 border-b border-zinc-900">
-          <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">Batch Details</p>
+          <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">{t('batchDetails')}</p>
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
               <label className="block text-zinc-400 text-sm mb-2">
-                Batch Name
+                {t('batchName')}
               </label>
               <Input
                 value={batchName}
                 onChange={(e) => setBatchName(e.target.value)}
-                placeholder="e.g., Q1 2025 Campaign"
+                placeholder={t('batchNamePlaceholder')}
                 className="bg-transparent border-zinc-800 focus:border-zinc-700"
               />
             </div>
             <div>
               <label className="block text-zinc-400 text-sm mb-2">
-                Client <span className="text-zinc-600">(optional)</span>
+                {t('client')} <span className="text-zinc-600">{t('clientOptional')}</span>
               </label>
               <Input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                placeholder="e.g., Nike, Coca-Cola"
+                placeholder={t('clientPlaceholder')}
                 className="bg-transparent border-zinc-800 focus:border-zinc-700"
               />
             </div>
@@ -130,7 +137,7 @@ export default function NewBatchPage() {
 
         {/* Add Creators */}
         <div className="pb-10 mb-10 border-b border-zinc-900">
-          <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">Add Creators</p>
+          <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">{t('addCreators')}</p>
           <BulkImport
             onImport={handleBulkImport}
             existingCount={creators.length}
@@ -146,7 +153,7 @@ export default function NewBatchPage() {
             ) : (
               <ChevronDown className="w-4 h-4" />
             )}
-            Add single creator manually
+            {t('addManually')}
           </button>
           {showManualEntry && (
             <div className="mt-6 pt-6 border-t border-zinc-900">
@@ -160,13 +167,13 @@ export default function NewBatchPage() {
           <div className="pb-10 mb-10 border-b border-zinc-900">
             <div className="flex items-center justify-between mb-6">
               <p className="text-zinc-600 text-xs uppercase tracking-wider">
-                Creators ({creators.length})
+                {t('creatorsCount', { count: creators.length })}
               </p>
               <button
                 onClick={() => setCreators([])}
                 className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors"
               >
-                Clear all
+                {tCommon('clear')}
               </button>
             </div>
             <div className="space-y-px max-h-80 overflow-y-auto">
@@ -182,7 +189,7 @@ export default function NewBatchPage() {
                   </div>
                   <div className="w-24 text-right">
                     <span className="text-zinc-600 text-sm">
-                      {creator.socialLinks.length} link{creator.socialLinks.length !== 1 ? 's' : ''}
+                      {t('links', { count: creator.socialLinks.length })}
                     </span>
                   </div>
                   <button
@@ -208,47 +215,47 @@ export default function NewBatchPage() {
             ) : (
               <ChevronDown className="w-4 h-4" />
             )}
-            Advanced options
+            {t('advancedOptions')}
           </button>
           {showAdvanced && (
             <div className="mt-8 space-y-8">
               {/* Brand Partnership Analysis */}
               <div>
                 <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">
-                  Brand Partnership Analysis
+                  {t('brandPartnershipAnalysis')}
                 </p>
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div>
                     <label className="block text-zinc-400 text-sm mb-2">
-                      Time Range
+                      {t('timeRange')}
                     </label>
                     <select
                       value={monthsBack}
                       onChange={(e) => setMonthsBack(Number(e.target.value))}
                       className="w-full bg-transparent border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 text-sm focus:outline-none focus:border-zinc-700"
                     >
-                      <option value={3}>Last 3 months</option>
-                      <option value={6}>Last 6 months (default)</option>
-                      <option value={12}>Last 12 months</option>
-                      <option value={24}>Last 24 months</option>
-                      <option value={36}>Last 36 months (3 years)</option>
+                      <option value={3}>{t('last3Months')}</option>
+                      <option value={6}>{t('last6Months')}</option>
+                      <option value={12}>{t('last12Months')}</option>
+                      <option value={24}>{t('last24Months')}</option>
+                      <option value={36}>{t('last36Months')}</option>
                     </select>
                     <p className="mt-2 text-xs text-zinc-600">
-                      How far back to analyze creator content
+                      {t('timeRangeHelp')}
                     </p>
                   </div>
                   <div>
                     <label className="block text-zinc-400 text-sm mb-2">
-                      Client Brand
+                      {t('clientBrand')}
                     </label>
                     <Input
                       value={clientBrand}
                       onChange={(e) => setClientBrand(e.target.value)}
-                      placeholder="e.g., Coca-Cola, Nike"
+                      placeholder={t('clientPlaceholder')}
                       className="bg-transparent border-zinc-800 focus:border-zinc-700"
                     />
                     <p className="mt-2 text-xs text-zinc-600">
-                      AI will identify competitors and flag partnerships
+                      {t('clientBrandHelp')}
                     </p>
                   </div>
                 </div>
@@ -257,10 +264,10 @@ export default function NewBatchPage() {
               {/* Custom Search Terms */}
               <div>
                 <p className="text-zinc-600 text-xs uppercase tracking-wider mb-4">
-                  Custom Search Terms
+                  {t('customSearchTerms')}
                 </p>
                 <p className="text-zinc-500 text-sm mb-4">
-                  Add custom search terms beyond the defaults (lawsuit, scandal, controversy, etc.)
+                  {t('customSearchTermsHelp')}
                 </p>
                 <SearchTermsInput terms={searchTerms} onChange={setSearchTerms} />
               </div>
@@ -281,13 +288,13 @@ export default function NewBatchPage() {
             onClick={() => router.back()}
             className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Creating...' : 'Create Batch'}
+            {isSubmitting ? t('creating') : t('createBatch')}
           </Button>
         </div>
       </div>

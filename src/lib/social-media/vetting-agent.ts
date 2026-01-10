@@ -141,23 +141,34 @@ export async function makeVettingDecisions(
   screeningResults: ScreeningResult[],
   posts: SocialMediaPost[],
   creatorContext: CreatorContext,
-  platform: 'instagram' | 'tiktok' | 'youtube'
+  platform: 'instagram' | 'tiktok' | 'youtube',
+  language: string = 'en'
 ): Promise<VettingResult> {
+  const isGerman = language === 'de';
+
   // If nothing needs review, return clean result
   const needsReview = screeningResults.filter((r) => r.requiresSeniorReview);
   if (needsReview.length === 0) {
     return {
       decisions: [],
       overallRisk: 'low',
-      summary: `Reviewed ${posts.length} ${platform} posts for @${creatorContext.handle}. No brand safety concerns identified.`,
+      summary: isGerman
+        ? `${posts.length} ${platform}-Beiträge für @${creatorContext.handle} überprüft. Keine Markenrisiken identifiziert.`
+        : `Reviewed ${posts.length} ${platform} posts for @${creatorContext.handle}. No brand safety concerns identified.`,
       recommendation: 'approve',
-      recommendationRationale: 'Content review found no significant brand safety risks.',
+      recommendationRationale: isGerman
+        ? 'Die Inhaltsüberprüfung ergab keine signifikanten Markenrisiken.'
+        : 'Content review found no significant brand safety risks.',
     };
   }
 
   const flaggedContent = formatScreeningForVetting(screeningResults, posts);
 
-  const prompt = `You are a Senior Brand Safety Analyst at a talent vetting agency. A junior analyst has screened social media content and flagged potential issues for your review.
+  const languageInstruction = isGerman
+    ? 'WICHTIG: Antworte vollständig auf Deutsch. Alle Textfelder (summary, reason, recommendationRationale, concerns) müssen auf Deutsch sein.\n\n'
+    : '';
+
+  const prompt = `${languageInstruction}You are a Senior Brand Safety Analyst at a talent vetting agency. A junior analyst has screened social media content and flagged potential issues for your review.
 
 Your role:
 1. REVIEW each flagged item with senior judgment
@@ -242,7 +253,7 @@ If all flags are false positives, return an empty decisions array with "approve"
     return result;
   } catch (error) {
     console.error(`Opus vetting failed for ${platform}/@${creatorContext.handle}:`, error);
-    return getDefaultVettingResult(posts.length, platform, creatorContext.handle);
+    return getDefaultVettingResult(posts.length, platform, creatorContext.handle, isGerman);
   }
 }
 
@@ -252,14 +263,19 @@ If all flags are false positives, return an empty decisions array with "approve"
 function getDefaultVettingResult(
   postCount: number,
   platform: string,
-  handle: string
+  handle: string,
+  isGerman: boolean = false
 ): VettingResult {
   return {
     decisions: [],
     overallRisk: 'low',
-    summary: `Reviewed ${postCount} ${platform} posts for @${handle}. Unable to complete detailed analysis.`,
+    summary: isGerman
+      ? `${postCount} ${platform}-Beiträge für @${handle} überprüft. Detaillierte Analyse konnte nicht abgeschlossen werden.`
+      : `Reviewed ${postCount} ${platform} posts for @${handle}. Unable to complete detailed analysis.`,
     recommendation: 'review',
-    recommendationRationale: 'Manual review recommended due to analysis limitations.',
+    recommendationRationale: isGerman
+      ? 'Manuelle Überprüfung aufgrund von Analyseeinschränkungen empfohlen.'
+      : 'Manual review recommended due to analysis limitations.',
   };
 }
 

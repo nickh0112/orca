@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Play, RotateCcw, Download, Loader2 } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
 import { useBatchStream } from '@/hooks/use-batch-stream';
 import { BatchProgress } from '@/components/batch/batch-progress';
 import { Button } from '@/components/ui/button';
@@ -30,20 +31,6 @@ interface Batch {
   searchTerms: string | null;
   creators: Creator[];
   createdAt: string;
-}
-
-function getVerdict(riskLevel: RiskLevel | undefined): { text: string; color: string } {
-  switch (riskLevel) {
-    case 'CRITICAL':
-    case 'HIGH':
-      return { text: 'review', color: 'text-red-500' };
-    case 'MEDIUM':
-      return { text: 'review', color: 'text-amber-500' };
-    case 'LOW':
-      return { text: 'approve', color: 'text-emerald-600' };
-    default:
-      return { text: 'pending', color: 'text-zinc-600' };
-  }
 }
 
 function getStatusDot(status: CreatorStatus, riskLevel?: RiskLevel): string {
@@ -83,6 +70,12 @@ export default function BatchDetailPage({
   const [batch, setBatch] = useState<Batch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+
+  const t = useTranslations('batchDetail');
+  const tBatches = useTranslations('batches');
+  const tVerdict = useTranslations('verdict');
+  const tCommon = useTranslations('common');
+  const locale = useLocale();
 
   const { results, resultsMap, isStreaming, isComplete, error, startStream } =
     useBatchStream(batchId);
@@ -128,6 +121,20 @@ export default function BatchDetailPage({
     window.open(`/api/batches/${batchId}/export`, '_blank');
   };
 
+  const getVerdict = (riskLevel: RiskLevel | undefined): { text: string; color: string } => {
+    switch (riskLevel) {
+      case 'CRITICAL':
+      case 'HIGH':
+        return { text: tVerdict('review'), color: 'text-red-500' };
+      case 'MEDIUM':
+        return { text: tVerdict('review'), color: 'text-amber-500' };
+      case 'LOW':
+        return { text: tVerdict('approve'), color: 'text-emerald-600' };
+      default:
+        return { text: tVerdict('pending'), color: 'text-zinc-600' };
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -140,9 +147,9 @@ export default function BatchDetailPage({
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-zinc-400 mb-4">Batch not found</p>
-          <Link href="/batches" className="text-zinc-300 hover:text-white">
-            Back to batches
+          <p className="text-zinc-400 mb-4">{tBatches('notFound')}</p>
+          <Link href={`/${locale}/batches`} className="text-zinc-300 hover:text-white">
+            {tBatches('backToBatches')}
           </Link>
         </div>
       </div>
@@ -175,11 +182,11 @@ export default function BatchDetailPage({
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-4xl mx-auto px-8 py-16">
         <Link
-          href="/batches"
+          href={`/${locale}/batches`}
           className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 mb-12 text-sm tracking-wide"
         >
           <ArrowLeft className="w-4 h-4" />
-          batches
+          {tBatches('title').toLowerCase()}
         </Link>
 
         <div className="mb-16">
@@ -187,21 +194,21 @@ export default function BatchDetailPage({
             <div>
               <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">{batch.name}</h1>
               <p className="text-zinc-600 text-sm">
-                {batch.creators.length} creator{batch.creators.length !== 1 ? 's' : ''}
-                {reviewCount > 0 && ` · ${reviewCount} to review`}
+                {tBatches('creators', { count: batch.creators.length })}
+                {reviewCount > 0 && ` · ${reviewCount} ${tBatches('toReview')}`}
               </p>
             </div>
             <div className="flex items-center gap-3">
               {canStart && (
                 <Button onClick={handleStartProcessing} disabled={isStarting} size="sm">
                   <Play className="w-4 h-4 mr-2" />
-                  {isStarting ? 'Starting...' : 'Start Research'}
+                  {isStarting ? t('starting') : t('startResearch')}
                 </Button>
               )}
               {(batch.status === 'COMPLETED' || completedCount > 0) && (
                 <Button variant="secondary" onClick={handleExport} size="sm">
                   <Download className="w-4 h-4 mr-2" />
-                  Export
+                  {tCommon('export')}
                 </Button>
               )}
             </div>
@@ -222,7 +229,7 @@ export default function BatchDetailPage({
             <p className="text-red-400 text-sm">{error}</p>
             <Button variant="ghost" size="sm" onClick={handleRetry}>
               <RotateCcw className="w-4 h-4 mr-1" />
-              Retry
+              {tCommon('retry')}
             </Button>
           </div>
         )}
@@ -265,7 +272,7 @@ export default function BatchDetailPage({
                     'text-sm uppercase tracking-wider',
                     effectiveStatus === 'COMPLETED' ? verdict.color : 'text-zinc-700'
                   )}>
-                    {effectiveStatus === 'COMPLETED' ? verdict.text : effectiveStatus.toLowerCase()}
+                    {effectiveStatus === 'COMPLETED' ? verdict.text : t(effectiveStatus.toLowerCase() as 'processing' | 'completed')}
                   </span>
                 </div>
 
@@ -282,7 +289,7 @@ export default function BatchDetailPage({
               return (
                 <Link
                   key={creator.id}
-                  href={`/batches/${batchId}/creators/${creator.id}`}
+                  href={`/${locale}/batches/${batchId}/creators/${creator.id}`}
                   className="block group"
                 >
                   {content}
@@ -301,8 +308,8 @@ export default function BatchDetailPage({
         {isComplete && (
           <div className="mt-12 text-center">
             <p className="text-zinc-600 text-sm">
-              Research complete · {completedCount} of {batch.creators.length} processed
-              {failedCount > 0 && ` · ${failedCount} failed`}
+              {t('researchComplete')} · {t('processed', { completed: completedCount, total: batch.creators.length })}
+              {failedCount > 0 && ` · ${t('failed', { count: failedCount })}`}
             </p>
           </div>
         )}

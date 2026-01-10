@@ -63,8 +63,11 @@ async function analyzePlatformContent(
   posts: SocialMediaPost[],
   platform: 'instagram' | 'tiktok' | 'youtube',
   handle: string,
-  creatorName: string
+  creatorName: string,
+  language: string = 'en'
 ): Promise<TwoTierAnalysisResult> {
+  const isGerman = language === 'de';
+
   if (posts.length === 0) {
     return {
       flaggedPosts: [],
@@ -72,9 +75,9 @@ async function analyzePlatformContent(
       vettingResult: {
         decisions: [],
         overallRisk: 'low',
-        summary: 'No posts to analyze.',
+        summary: isGerman ? 'Keine Beiträge zur Analyse vorhanden.' : 'No posts to analyze.',
         recommendation: 'approve',
-        recommendationRationale: 'No content available for analysis.',
+        recommendationRationale: isGerman ? 'Keine Inhalte für die Analyse verfügbar.' : 'No content available for analysis.',
       },
       keywordResults: new Map(),
     };
@@ -103,7 +106,8 @@ async function analyzePlatformContent(
     screeningResults,
     posts,
     creatorContext,
-    platform
+    platform,
+    language
   );
   console.log(`  → ${vettingResult.decisions.length} confirmed risks, recommendation: ${vettingResult.recommendation}`);
 
@@ -210,7 +214,8 @@ function generateSummary(
  */
 export async function analyzeSocialMediaContent(
   content: SocialMediaContent[],
-  creatorName: string
+  creatorName: string,
+  language: string = 'en'
 ): Promise<SocialMediaAnalysis[]> {
   const analyses: SocialMediaAnalysis[] = [];
 
@@ -231,7 +236,8 @@ export async function analyzeSocialMediaContent(
       source.posts,
       source.platform,
       source.handle,
-      creatorName
+      creatorName,
+      language
     );
 
     // Calculate transcript coverage for logging

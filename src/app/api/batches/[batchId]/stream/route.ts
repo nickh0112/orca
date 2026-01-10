@@ -178,7 +178,7 @@ export async function GET(
             const totalPosts = socialMediaContent.reduce((sum, c) => sum + c.posts.length, 0);
             if (totalPosts > 0) {
               console.log(`Analyzing ${totalPosts} social media posts for ${creator.name}`);
-              socialMediaAnalyses = await analyzeSocialMediaContent(socialMediaContent, creator.name);
+              socialMediaAnalyses = await analyzeSocialMediaContent(socialMediaContent, creator.name, creator.language || 'en');
               socialMediaFindings = convertAnalysisToFindings(socialMediaAnalyses);
 
               // Run profanity detection and brand partnership extraction on each platform's content
@@ -287,11 +287,12 @@ export async function GET(
           const findings = [...exaFindings, ...socialMediaFindings, ...competitorFindings];
           const riskLevel = calculateRiskLevel(findings);
 
-          // Generate AI rationale summary
+          // Generate AI rationale summary (use creator's language setting)
           const rationale = await generateRationale(
             findings,
             creator.name,
-            socialLinks
+            socialLinks,
+            creator.language || 'en'
           );
 
           // Create report - include all results

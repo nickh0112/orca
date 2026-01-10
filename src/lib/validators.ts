@@ -12,6 +12,7 @@ export const batchSchema = z.object({
   searchTerms: z.array(z.string().max(50)).optional(),
   userEmail: z.string().email().optional(),
   clientName: z.string().max(200).optional(),
+  language: z.enum(['en', 'de']).optional().default('en'),
   // Brand partnership analysis settings
   monthsBack: z.number().min(1).max(36).optional(),
   clientBrand: z.string().max(200).optional(),

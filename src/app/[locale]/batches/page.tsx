@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loader2, User, UsersRound } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
 import { Spinner } from '@/components/ui/spinner';
 import { cn, formatDate } from '@/lib/utils';
@@ -40,6 +41,8 @@ export default function BatchesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('mine');
   const { email, hasEmail } = useUserEmail();
+  const t = useTranslations('batches');
+  const locale = useLocale();
 
   useEffect(() => {
     fetch('/api/batches')
@@ -75,10 +78,10 @@ export default function BatchesPage() {
         <div className="flex items-center justify-between mb-16">
           <div>
             <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">
-              {viewMode === 'mine' ? 'My Batches' : 'All Batches'}
+              {viewMode === 'mine' ? t('myTitle') : t('title')}
             </h1>
             <p className="text-zinc-600 text-sm">
-              {filteredBatches.length} batch{filteredBatches.length !== 1 ? 'es' : ''}
+              {t('subtitle', { count: filteredBatches.length })}
             </p>
           </div>
           {hasEmail && (
@@ -91,7 +94,7 @@ export default function BatchesPage() {
                 )}
               >
                 <User className="w-4 h-4" />
-                Mine ({myCount})
+                {t('mine')} ({myCount})
               </button>
               <button
                 onClick={() => setViewMode('all')}
@@ -101,7 +104,7 @@ export default function BatchesPage() {
                 )}
               >
                 <UsersRound className="w-4 h-4" />
-                All ({batches.length})
+                {t('all')} ({batches.length})
               </button>
             </div>
           )}
@@ -113,7 +116,7 @@ export default function BatchesPage() {
             {filteredBatches.map((batch) => (
               <Link
                 key={batch.id}
-                href={`/batches/${batch.id}`}
+                href={`/${locale}/batches/${batch.id}`}
                 className="block group"
               >
                 <div className="flex items-center py-5 border-b border-zinc-900 hover:border-zinc-800 transition-colors">
@@ -141,7 +144,7 @@ export default function BatchesPage() {
                   {/* Creators */}
                   <div className="w-28 text-right">
                     <span className="text-zinc-600 text-sm">
-                      {batch._count.creators} creator{batch._count.creators !== 1 ? 's' : ''}
+                      {t('creators', { count: batch._count.creators })}
                     </span>
                   </div>
 
@@ -158,13 +161,13 @@ export default function BatchesPage() {
         ) : (
           <div className="py-16 text-center">
             <p className="text-zinc-600 text-sm mb-4">
-              {viewMode === 'mine' ? 'No batches yet' : 'No batches found'}
+              {viewMode === 'mine' ? t('noBatches') : t('noBatchesFound')}
             </p>
             <Link
-              href="/batches/new"
+              href={`/${locale}/batches/new`}
               className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
             >
-              + Create your first batch
+              {t('createFirst')}
             </Link>
           </div>
         )}
@@ -173,10 +176,10 @@ export default function BatchesPage() {
         {filteredBatches.length > 0 && (
           <div className="mt-12 text-center">
             <Link
-              href="/batches/new"
+              href={`/${locale}/batches/new`}
               className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
             >
-              + Create new batch
+              {t('createNew')}
             </Link>
           </div>
         )}

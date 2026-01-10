@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { User, UsersRound, Loader2 } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
 import { RiskChart } from '@/components/dashboard/risk-chart';
 import { TrendChart } from '@/components/dashboard/trend-chart';
@@ -57,11 +58,11 @@ function getStatusDot(status: string): string {
   }
 }
 
-function getRiskLabel(score: number): { label: string; color: string } {
-  if (score < 1.5) return { label: 'Low', color: 'text-emerald-500' };
-  if (score < 2.5) return { label: 'Medium', color: 'text-amber-500' };
-  if (score < 3.5) return { label: 'High', color: 'text-orange-500' };
-  return { label: 'Critical', color: 'text-red-500' };
+function getRiskLabel(score: number, t: (key: string) => string): { label: string; color: string } {
+  if (score < 1.5) return { label: t('low'), color: 'text-emerald-500' };
+  if (score < 2.5) return { label: t('medium'), color: 'text-amber-500' };
+  if (score < 3.5) return { label: t('high'), color: 'text-orange-500' };
+  return { label: t('critical'), color: 'text-red-500' };
 }
 
 type ViewMode = 'team' | 'personal';
@@ -71,6 +72,10 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('team');
   const { email, hasEmail } = useUserEmail();
+  const t = useTranslations('dashboard');
+  const tRisk = useTranslations('risk');
+  const tCommon = useTranslations('common');
+  const locale = useLocale();
 
   useEffect(() => {
     setIsLoading(true);
@@ -101,13 +106,13 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <p className="text-zinc-400">Failed to load dashboard</p>
+        <p className="text-zinc-400">{t('failedToLoad')}</p>
       </div>
     );
   }
 
   const riskInfo = stats.summary.avgRiskScore > 0
-    ? getRiskLabel(stats.summary.avgRiskScore)
+    ? getRiskLabel(stats.summary.avgRiskScore, tRisk)
     : null;
 
   return (
@@ -117,9 +122,9 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-16">
           <div>
             <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">
-              {viewMode === 'personal' ? 'My Performance' : 'Team Dashboard'}
+              {viewMode === 'personal' ? t('personalTitle') : t('teamTitle')}
             </h1>
-            <p className="text-zinc-600 text-sm">Creator vetting overview</p>
+            <p className="text-zinc-600 text-sm">{t('subtitle')}</p>
           </div>
           {hasEmail && (
             <div className="flex items-center gap-4 text-sm">
@@ -131,7 +136,7 @@ export default function DashboardPage() {
                 )}
               >
                 <UsersRound className="w-4 h-4" />
-                Team
+                {t('team')}
               </button>
               <button
                 onClick={() => setViewMode('personal')}
@@ -141,7 +146,7 @@ export default function DashboardPage() {
                 )}
               >
                 <User className="w-4 h-4" />
-                Personal
+                {t('personal')}
               </button>
             </div>
           )}
@@ -150,21 +155,21 @@ export default function DashboardPage() {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-12 mb-16">
           <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Creators Vetted</p>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('creatorsVetted')}</p>
             <p className="text-2xl text-zinc-200 font-light">{stats.summary.totalCreators}</p>
           </div>
           <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Batches This Month</p>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('batchesThisMonth')}</p>
             <p className="text-2xl text-zinc-200 font-light">{stats.summary.batchesThisMonth}</p>
           </div>
           <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Avg Risk Level</p>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('avgRiskLevel')}</p>
             <p className={cn('text-2xl font-light', riskInfo?.color || 'text-zinc-500')}>
               {riskInfo ? riskInfo.label : '—'}
             </p>
           </div>
           <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Success Rate</p>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('successRate')}</p>
             <p className="text-2xl text-zinc-200 font-light">{stats.summary.successRate}%</p>
           </div>
         </div>
@@ -178,7 +183,7 @@ export default function DashboardPage() {
         {/* Team Activity - minimal table */}
         {viewMode === 'team' && stats.teamActivity.length > 0 && (
           <div className="mb-16">
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">Team Activity</p>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">{t('teamActivity')}</p>
             <div className="space-y-px">
               {stats.teamActivity.map((member) => (
                 <div key={member.userEmail} className="flex items-center py-4 border-b border-zinc-900">
@@ -186,10 +191,10 @@ export default function DashboardPage() {
                     <span className="text-zinc-300">{member.userEmail}</span>
                   </div>
                   <div className="w-24 text-right">
-                    <span className="text-zinc-500 text-sm">{member.batchCount} batches</span>
+                    <span className="text-zinc-500 text-sm">{member.batchCount} {t('batches')}</span>
                   </div>
                   <div className="w-32 text-right">
-                    <span className="text-zinc-500 text-sm">{member.creatorCount} creators</span>
+                    <span className="text-zinc-500 text-sm">{member.creatorCount} {t('creators')}</span>
                   </div>
                   <div className="w-24 text-right">
                     <span className={cn(
@@ -210,13 +215,13 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center justify-between mb-6">
             <p className="text-zinc-600 text-xs uppercase tracking-wider">
-              {viewMode === 'personal' ? 'My Recent Batches' : 'Recent Batches'}
+              {viewMode === 'personal' ? t('myRecentBatches') : t('recentBatches')}
             </p>
             <Link
-              href="/batches"
+              href={`/${locale}/batches`}
               className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors"
             >
-              View all →
+              {tCommon('viewAll')} →
             </Link>
           </div>
 
@@ -225,7 +230,7 @@ export default function DashboardPage() {
               {stats.recentBatches.slice(0, 5).map((batch) => (
                 <Link
                   key={batch.id}
-                  href={`/batches/${batch.id}`}
+                  href={`/${locale}/batches/${batch.id}`}
                   className="block group"
                 >
                   <div className="flex items-center py-5 border-b border-zinc-900 hover:border-zinc-800 transition-colors">
@@ -247,7 +252,7 @@ export default function DashboardPage() {
 
                     {/* Creators */}
                     <div className="w-28 text-right">
-                      <span className="text-zinc-600 text-sm">{batch.creatorCount} creators</span>
+                      <span className="text-zinc-600 text-sm">{batch.creatorCount} {t('creators')}</span>
                     </div>
 
                     {/* Date */}
@@ -260,7 +265,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="py-12 text-center">
-              <p className="text-zinc-600 text-sm">No batches yet</p>
+              <p className="text-zinc-600 text-sm">{t('noBatches')}</p>
             </div>
           )}
         </div>
@@ -268,10 +273,10 @@ export default function DashboardPage() {
         {/* New Batch Link */}
         <div className="mt-12 text-center">
           <Link
-            href="/batches/new"
+            href={`/${locale}/batches/new`}
             className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
           >
-            + Create new batch
+            {t('createNewBatch')}
           </Link>
         </div>
       </div>

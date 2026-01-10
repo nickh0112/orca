@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -63,6 +63,14 @@ interface CreatorListItem {
 }
 
 export default function MediaGalleryPrototype() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-400" /></div>}>
+      <MediaGalleryContent />
+    </Suspense>
+  );
+}
+
+function MediaGalleryContent() {
   const searchParams = useSearchParams();
   const creatorIdParam = searchParams.get('creatorId');
 
