@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, searchTerms, userEmail, clientName, creators } = result.data;
+    const { name, searchTerms, userEmail, clientName, monthsBack, clientBrand, creators } = result.data;
 
     const batch = await db.batch.create({
       data: {
@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
           create: creators.map((creator) => ({
             name: creator.name,
             socialLinks: JSON.stringify(creator.socialLinks),
+            // Apply batch-level settings to each creator
+            monthsBack: monthsBack || null,
+            clientBrand: clientBrand || null,
           })),
         },
       },

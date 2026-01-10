@@ -24,6 +24,9 @@ export default function NewBatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
+  // Brand partnership analysis settings
+  const [monthsBack, setMonthsBack] = useState<number>(6);
+  const [clientBrand, setClientBrand] = useState('');
 
   const handleAddCreator = (creator: CreatorInput) => {
     setCreators((prev) => [...prev, creator]);
@@ -59,6 +62,8 @@ export default function NewBatchPage() {
           searchTerms: searchTerms.length > 0 ? searchTerms : undefined,
           userEmail: userEmail || undefined,
           clientName: clientName.trim() || undefined,
+          monthsBack: monthsBack !== 6 ? monthsBack : undefined,
+          clientBrand: clientBrand.trim() || undefined,
           creators,
         }),
       });
@@ -214,11 +219,58 @@ export default function NewBatchPage() {
               )}
             </button>
             {showAdvanced && (
-              <div className="mt-4 pt-4 border-t border-zinc-800">
-                <p className="text-sm text-zinc-500 mb-4">
-                  Add custom search terms beyond the defaults (lawsuit, scandal, controversy, etc.)
-                </p>
-                <SearchTermsInput terms={searchTerms} onChange={setSearchTerms} />
+              <div className="mt-4 pt-4 border-t border-zinc-800 space-y-6">
+                {/* Brand Partnership Analysis */}
+                <div>
+                  <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                    Brand Partnership Analysis
+                  </h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm text-zinc-400 mb-2">
+                        Time Range
+                      </label>
+                      <select
+                        value={monthsBack}
+                        onChange={(e) => setMonthsBack(Number(e.target.value))}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={3}>Last 3 months</option>
+                        <option value={6}>Last 6 months (default)</option>
+                        <option value={12}>Last 12 months</option>
+                        <option value={24}>Last 24 months</option>
+                        <option value={36}>Last 36 months (3 years)</option>
+                      </select>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        How far back to analyze creator content
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-zinc-400 mb-2">
+                        Client Brand (for competitor detection)
+                      </label>
+                      <Input
+                        value={clientBrand}
+                        onChange={(e) => setClientBrand(e.target.value)}
+                        placeholder="e.g., Coca-Cola, Nike"
+                      />
+                      <p className="mt-1 text-xs text-zinc-500">
+                        AI will identify competitors and flag partnerships
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Custom Search Terms */}
+                <div>
+                  <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                    Custom Search Terms
+                  </h3>
+                  <p className="text-sm text-zinc-500 mb-4">
+                    Add custom search terms beyond the defaults (lawsuit, scandal, controversy, etc.)
+                  </p>
+                  <SearchTermsInput terms={searchTerms} onChange={setSearchTerms} />
+                </div>
               </div>
             )}
           </Card>
