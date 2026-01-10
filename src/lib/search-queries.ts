@@ -218,6 +218,8 @@ export function generateSummary(findings: Finding[], riskLevel: RiskLevel): stri
     court_case: findings.filter((f) => f.type === 'court_case').length,
     news_article: findings.filter((f) => f.type === 'news_article').length,
     social_controversy: findings.filter((f) => f.type === 'social_controversy').length,
+    social_post: findings.filter((f) => f.type === 'social_post').length,
+    reddit_mention: findings.filter((f) => f.type === 'reddit_mention').length,
   };
 
   const parts: string[] = [];
@@ -231,6 +233,16 @@ export function generateSummary(findings: Finding[], riskLevel: RiskLevel): stri
   if (counts.social_controversy > 0) {
     parts.push(
       `${counts.social_controversy} social media incident${counts.social_controversy > 1 ? 's' : ''}`
+    );
+  }
+  if (counts.social_post > 0) {
+    parts.push(
+      `${counts.social_post} flagged social post${counts.social_post > 1 ? 's' : ''}`
+    );
+  }
+  if (counts.reddit_mention > 0) {
+    parts.push(
+      `${counts.reddit_mention} Reddit mention${counts.reddit_mention > 1 ? 's' : ''}`
     );
   }
 

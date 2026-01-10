@@ -27,9 +27,20 @@ model Creator {
   name        String
   socialLinks String        // JSON array of social media URLs
   status      CreatorStatus @default(PENDING)
+
+  // Per-platform status tracking
+  instagramStatus   PlatformStatus @default(NOT_REQUESTED)
+  youtubeStatus     PlatformStatus @default(NOT_REQUESTED)
+  tiktokStatus      PlatformStatus @default(NOT_REQUESTED)
+  webSearchStatus   PlatformStatus @default(NOT_REQUESTED)
+
+  // Language for profanity detection
+  language    String        @default("en")
+
   batchId     String
   batch       Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
   report      Report?
+  attachments Attachment[]
   retryCount  Int           @default(0)
   lastError   String?
   createdAt   DateTime      @default(now())
@@ -69,4 +80,23 @@ enum RiskLevel {
   HIGH
   CRITICAL
   UNKNOWN
+}
+
+enum PlatformStatus {
+  NOT_REQUESTED
+  PENDING
+  READY
+  FAILED
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  creatorId   String
+  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  type        String   // brands-instagram, keywords-youtube, profanity-tiktok, statistics, etc.
+  platform    String?  // instagram, youtube, tiktok, web
+  data        String   // JSON blob
+  createdAt   DateTime @default(now())
+
+  @@index([creatorId, type])
 }

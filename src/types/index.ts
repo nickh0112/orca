@@ -31,6 +31,17 @@ export interface Finding {
     publishedDate?: string;
   };
   validation?: FindingValidation;
+  socialMediaSource?: {
+    platform: 'instagram' | 'tiktok' | 'youtube';
+    handle: string;
+    postId: string;
+    engagement?: {
+      likes?: number;
+      comments?: number;
+      views?: number;
+      shares?: number;
+    };
+  };
 }
 
 export interface CreatorResult {

@@ -7,6 +7,16 @@ import {
   generateSummary,
 } from '@/lib/search-queries';
 import { validateResults, generateRationale } from '@/lib/result-validator';
+import {
+  fetchAllSocialMedia,
+  analyzeSocialMediaContent,
+  convertAnalysisToFindings,
+} from '@/lib/social-media';
+import { detectProfanity } from '@/lib/profanity';
+import { searchFlaggedTopics, isGoogleSearchConfigured } from '@/lib/google-search';
+import { convertBrandResults, convertKeywordResults, convertWebSearchResults } from '@/lib/v1-adapter';
+import { extractSocialHandles } from '@/lib/utils';
+import type { PlatformStatus } from '@prisma/client';
 
 // Concurrency settings
 const CONCURRENT_CREATORS = 10; // Process 10 creators at a time for better throughput
@@ -37,12 +47,50 @@ export async function GET(
         );
       };
 
+      // Helper to update platform status
+      const updatePlatformStatus = async (
+        creatorId: string,
+        platform: 'instagram' | 'youtube' | 'tiktok' | 'web',
+        status: PlatformStatus
+      ) => {
+        // Map platform to field name (web -> webSearchStatus)
+        const fieldMap: Record<string, string> = {
+          instagram: 'instagramStatus',
+          youtube: 'youtubeStatus',
+          tiktok: 'tiktokStatus',
+          web: 'webSearchStatus',
+        };
+        const field = fieldMap[platform];
+        await db.creator.update({
+          where: { id: creatorId },
+          data: { [field]: status },
+        });
+      };
+
+      // Helper to save attachment
+      const saveAttachment = async (
+        creatorId: string,
+        type: string,
+        data: unknown,
+        platform?: string
+      ) => {
+        await db.attachment.create({
+          data: {
+            creatorId,
+            type,
+            platform,
+            data: JSON.stringify(data),
+          },
+        });
+      };
+
       // Process a single creator - returns result for tracking
       const processCreator = async (creator: {
         id: string;
         name: string;
         socialLinks: string;
         status: string;
+        language: string;
       }, searchTerms: string[]) => {
         // Skip already completed creators
         if (creator.status === 'COMPLETED') {
@@ -61,23 +109,124 @@ export async function GET(
             data: { status: 'PROCESSING' },
           });
 
-          // Perform research
+          // Parse social links and determine which platforms to process
           const socialLinks = JSON.parse(creator.socialLinks);
-          const { results, queries } = await searchCreator(
-            creator.name,
-            socialLinks,
-            searchTerms
-          );
+          const handles = extractSocialHandles(socialLinks);
 
-          // Validate results with heuristics + AI review
+          // Determine which platforms have handles
+          const hasInstagram = handles.some(h => h.platform === 'instagram');
+          const hasYoutube = handles.some(h => h.platform === 'youtube');
+          const hasTiktok = handles.some(h => h.platform === 'tiktok');
+
+          // Set platform statuses to PENDING for platforms we'll process
+          if (hasInstagram) await updatePlatformStatus(creator.id, 'instagram', 'PENDING');
+          if (hasYoutube) await updatePlatformStatus(creator.id, 'youtube', 'PENDING');
+          if (hasTiktok) await updatePlatformStatus(creator.id, 'tiktok', 'PENDING');
+          await updatePlatformStatus(creator.id, 'web', 'PENDING');
+
+          // Perform research - run Exa, Google, and social media fetch in parallel
+          const handleNames = handles.map(h => h.handle);
+
+          const [exaResult, googleResult, socialMediaContent] = await Promise.all([
+            searchCreator(creator.name, socialLinks, searchTerms),
+            isGoogleSearchConfigured()
+              ? searchFlaggedTopics(creator.name, handleNames, creator.language || 'en')
+              : Promise.resolve({ results: [], queries: [], topicCounts: {}, hasResults: false }),
+            fetchAllSocialMedia(socialLinks, 6), // Fetch last 6 months
+          ]);
+
+          const { results, queries } = exaResult;
+
+          // Update web search status
+          await updatePlatformStatus(creator.id, 'web', 'READY');
+
+          // Save Google search results as attachment
+          if (googleResult.results.length > 0) {
+            await saveAttachment(creator.id, 'web-search', {
+              results: convertWebSearchResults(googleResult),
+              summary: '',
+            }, 'web');
+          }
+
+          // Validate Exa results with heuristics + AI review
           const validatedResults = await validateResults(
             results,
             creator.name,
             socialLinks
           );
 
-          // Analyze validated findings
-          const findings = analyzeValidatedResults(validatedResults, creator.name);
+          // Analyze validated Exa findings
+          const exaFindings = analyzeValidatedResults(validatedResults, creator.name);
+
+          // Track profanity across all content
+          let allProfanityResults: ReturnType<typeof detectProfanity>[] = [];
+
+          // Analyze social media content for brand safety concerns
+          let socialMediaFindings: typeof exaFindings = [];
+          let socialMediaAnalyses: Awaited<ReturnType<typeof analyzeSocialMediaContent>> = [];
+
+          if (socialMediaContent.length > 0) {
+            const totalPosts = socialMediaContent.reduce((sum, c) => sum + c.posts.length, 0);
+            if (totalPosts > 0) {
+              console.log(`Analyzing ${totalPosts} social media posts for ${creator.name}`);
+              socialMediaAnalyses = await analyzeSocialMediaContent(socialMediaContent, creator.name);
+              socialMediaFindings = convertAnalysisToFindings(socialMediaAnalyses);
+
+              // Run profanity detection on each platform's content
+              for (const platformContent of socialMediaContent) {
+                const platform = platformContent.platform;
+                let platformStatus: PlatformStatus = 'READY';
+
+                try {
+                  // Detect profanity in posts
+                  const platformProfanityResults = platformContent.posts.map(post => {
+                    const content = post.caption + (post.transcript ? '\n' + post.transcript : '');
+                    return detectProfanity(content, creator.language || 'en');
+                  });
+
+                  allProfanityResults.push(...platformProfanityResults);
+
+                  // Save profanity results as attachment
+                  const hasProfanity = platformProfanityResults.some(r => r.hasProfanity);
+                  if (hasProfanity) {
+                    await saveAttachment(creator.id, `profanity-${platform}`, {
+                      hasProfanity: true,
+                      matches: platformProfanityResults.flatMap(r => r.matches),
+                    }, platform);
+                  }
+
+                  // Get brand results for this platform from the analysis
+                  const platformAnalysis = socialMediaAnalyses.find(a => a.platform === platform);
+                  if (platformAnalysis) {
+                    // Note: Brand/keyword results are already integrated in the analysis
+                    // We could extract and save them separately here if needed
+                  }
+                } catch (error) {
+                  console.error(`Error processing ${platform} for ${creator.name}:`, error);
+                  platformStatus = 'FAILED';
+                }
+
+                // Update platform status
+                await updatePlatformStatus(creator.id, platform as 'instagram' | 'youtube' | 'tiktok', platformStatus);
+              }
+            }
+          }
+
+          // Aggregate profanity results
+          const aggregatedProfanity = {
+            hasProfanity: allProfanityResults.some(r => r.hasProfanity),
+            maxSeverity: Math.max(0, ...allProfanityResults.map(r => r.maxSeverity)),
+            matches: allProfanityResults.flatMap(r => r.matches),
+            categories: [...new Set(allProfanityResults.flatMap(r => r.categories))],
+          };
+
+          // Save aggregated profanity
+          if (aggregatedProfanity.hasProfanity) {
+            await saveAttachment(creator.id, 'profanity', aggregatedProfanity);
+          }
+
+          // Merge all findings
+          const findings = [...exaFindings, ...socialMediaFindings];
           const riskLevel = calculateRiskLevel(findings);
 
           // Generate AI rationale summary
@@ -87,15 +236,21 @@ export async function GET(
             socialLinks
           );
 
-          // Create report
+          // Create report - include all results
           await db.report.create({
             data: {
               creatorId: creator.id,
               riskLevel,
               summary: rationale,
               findings: JSON.stringify(findings),
-              rawResults: JSON.stringify(results),
-              searchQueries: JSON.stringify(queries),
+              rawResults: JSON.stringify({
+                exa: results,
+                google: googleResult,
+                socialMedia: socialMediaContent,
+                socialMediaAnalyses: socialMediaAnalyses,
+                profanity: aggregatedProfanity,
+              }),
+              searchQueries: JSON.stringify([...queries, ...googleResult.queries]),
             },
           });
 
@@ -111,6 +266,8 @@ export async function GET(
             riskLevel,
             findingsCount: findings.length,
             summary: rationale,
+            profanityDetected: aggregatedProfanity.hasProfanity,
+            googleResults: googleResult.results.length,
           });
 
           return { success: true };
@@ -119,7 +276,13 @@ export async function GET(
 
           await db.creator.update({
             where: { id: creator.id },
-            data: { status: 'FAILED' },
+            data: {
+              status: 'FAILED',
+              instagramStatus: 'FAILED',
+              youtubeStatus: 'FAILED',
+              tiktokStatus: 'FAILED',
+              webSearchStatus: 'FAILED',
+            },
           });
 
           sendEvent('creator_failed', {
