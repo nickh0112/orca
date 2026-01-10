@@ -10,6 +10,11 @@ import {
   ArrowRight,
   Sparkles,
   Image,
+  Layers,
+  Grid3X3,
+  LayoutGrid,
+  BookOpen,
+  Terminal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -70,6 +75,50 @@ const prototypes = [
   },
 ];
 
+// Split View prototypes - different visual approaches to the same layout
+const splitViewPrototypes = [
+  {
+    id: 'split-minimal',
+    name: 'Split View: Minimal',
+    description: 'Ultra-clean aesthetic with maximum whitespace. Content breathes, UI disappears.',
+    icon: Layers,
+    features: ['Invisible Borders', 'Light Typography', 'Content Focus', 'Subtle Hierarchy'],
+    bestFor: 'Clean presentations, stakeholder reviews',
+  },
+  {
+    id: 'split-dense',
+    name: 'Split View: Dense',
+    description: 'High information density with tabular data. Compact spacing for power users.',
+    icon: Grid3X3,
+    features: ['Compact Rows', 'Data-Forward', 'Tabular Layout', 'Fast Scanning'],
+    bestFor: 'Power users, high-volume review',
+  },
+  {
+    id: 'split-cards',
+    name: 'Split View: Cards',
+    description: 'Clear visual blocks with generous padding. Approachable and structured.',
+    icon: LayoutGrid,
+    features: ['Visual Blocks', 'Rounded Corners', 'Layered Depth', 'Clear Actions'],
+    bestFor: 'General users, clear visual hierarchy',
+  },
+  {
+    id: 'split-editorial',
+    name: 'Split View: Editorial',
+    description: 'Magazine-inspired with serif headlines. Premium, refined typography.',
+    icon: BookOpen,
+    features: ['Serif Typography', 'Generous Leading', 'Section Dividers', 'Pull Quotes'],
+    bestFor: 'Executive summaries, formal reports',
+  },
+  {
+    id: 'split-mono',
+    name: 'Split View: Mono',
+    description: 'Terminal aesthetic with monospace font. Keyboard hints, developer feel.',
+    icon: Terminal,
+    features: ['Monospace Font', 'Keyboard Nav', 'Command Style', 'j/k Navigation'],
+    bestFor: 'Developers, keyboard-first users',
+  },
+];
+
 export default function PrototypesIndex() {
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -83,7 +132,7 @@ export default function PrototypesIndex() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-zinc-100">Report UI Prototypes</h1>
-              <p className="text-zinc-500">6 different approaches to creator vetting reports</p>
+              <p className="text-zinc-500">11 different approaches to creator vetting reports</p>
             </div>
           </div>
 
@@ -170,6 +219,61 @@ export default function PrototypesIndex() {
               </Link>
             );
           })}
+        </div>
+
+        {/* Split View Section */}
+        <div className="mt-16 pt-12 border-t border-zinc-800">
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <Layers className="w-5 h-5 text-zinc-500" />
+              <h2 className="text-xl font-semibold text-zinc-100">Split View Variations</h2>
+            </div>
+            <p className="text-zinc-500 max-w-2xl">
+              Five different visual styles for the same Split View layout pattern: content grid on the left,
+              context panel on the right. Same UX, different aesthetics.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            {splitViewPrototypes.map((proto) => {
+              const Icon = proto.icon;
+
+              return (
+                <Link
+                  key={proto.id}
+                  href={`/prototypes/${proto.id}`}
+                  className="group bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden hover:border-zinc-700 transition-all"
+                >
+                  {/* Icon header */}
+                  <div className="h-20 bg-zinc-800/50 flex items-center justify-center">
+                    <Icon className="w-8 h-8 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-4">
+                    <h3 className="text-sm font-medium text-zinc-200 mb-1 group-hover:text-white transition-colors">
+                      {proto.name.replace('Split View: ', '')}
+                    </h3>
+                    <p className="text-xs text-zinc-500 mb-3 line-clamp-2">
+                      {proto.description}
+                    </p>
+
+                    {/* Features */}
+                    <div className="flex flex-wrap gap-1">
+                      {proto.features.slice(0, 2).map((feature) => (
+                        <span
+                          key={feature}
+                          className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[9px] text-zinc-600"
+                        >
+                          {feature}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
 
         {/* Legend */}

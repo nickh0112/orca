@@ -19,6 +19,7 @@ export async function GET(
             name: true,
           },
         },
+        attachments: true,
       },
     });
 
@@ -37,6 +38,10 @@ export async function GET(
             searchQueries: JSON.parse(creator.report.searchQueries),
           }
         : null,
+      attachments: creator.attachments.map((att) => ({
+        ...att,
+        data: JSON.parse(att.data),
+      })),
     };
 
     return NextResponse.json(response);
