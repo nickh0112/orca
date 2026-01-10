@@ -18,6 +18,9 @@ export interface V1CreateReportRequest {
   custom_keywords?: string[];
   brands?: string[];
   callback_url?: string;
+  // Brand partnership analysis
+  months_back?: number;      // 1-36 months (default: 6)
+  client_brand?: string;     // Client brand for competitor detection
 }
 
 // V1 API Response Types
@@ -450,6 +453,16 @@ export function validateCreateReportRequest(
     };
   }
 
+  // Validate months_back (1-36)
+  let monthsBack: number | undefined;
+  if (data.months_back !== undefined) {
+    const mb = Number(data.months_back);
+    if (isNaN(mb) || mb < 1 || mb > 36) {
+      return { valid: false, error: 'months_back must be a number between 1 and 36' };
+    }
+    monthsBack = mb;
+  }
+
   return {
     valid: true,
     data: {
@@ -463,6 +476,8 @@ export function validateCreateReportRequest(
         : undefined,
       brands: Array.isArray(data.brands) ? (data.brands as string[]) : undefined,
       callback_url: data.callback_url as string | undefined,
+      months_back: monthsBack,
+      client_brand: data.client_brand as string | undefined,
     },
   };
 }

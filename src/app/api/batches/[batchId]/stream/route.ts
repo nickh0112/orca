@@ -91,6 +91,8 @@ export async function GET(
         socialLinks: string;
         status: string;
         language: string;
+        monthsBack: number | null;
+        clientBrand: string | null;
       }, searchTerms: string[]) => {
         // Skip already completed creators
         if (creator.status === 'COMPLETED') {
@@ -126,13 +128,14 @@ export async function GET(
 
           // Perform research - run Exa, Google, and social media fetch in parallel
           const handleNames = handles.map(h => h.handle);
+          const monthsBack = creator.monthsBack || 6; // Default to 6 months if not specified
 
           const [exaResult, googleResult, socialMediaContent] = await Promise.all([
             searchCreator(creator.name, socialLinks, searchTerms),
             isGoogleSearchConfigured()
               ? searchFlaggedTopics(creator.name, handleNames, creator.language || 'en')
               : Promise.resolve({ results: [], queries: [], topicCounts: {}, hasResults: false }),
-            fetchAllSocialMedia(socialLinks, 6), // Fetch last 6 months
+            fetchAllSocialMedia(socialLinks, monthsBack),
           ]);
 
           const { results, queries } = exaResult;

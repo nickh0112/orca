@@ -37,6 +37,10 @@ model Creator {
   // Language for profanity detection
   language    String        @default("en")
 
+  // Brand partnership analysis settings
+  monthsBack  Int?          // Time range for analysis (1-36 months, default 6)
+  clientBrand String?       // Client brand for competitor detection
+
   batchId     String
   batch       Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
   report      Report?

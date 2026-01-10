@@ -63,6 +63,9 @@ export async function POST(request: NextRequest) {
         youtubeStatus: data.youtube_handle ? 'PENDING' : 'NOT_REQUESTED',
         tiktokStatus: data.tiktok_handle ? 'PENDING' : 'NOT_REQUESTED',
         webSearchStatus: 'PENDING',
+        // Brand partnership analysis settings
+        monthsBack: data.months_back,
+        clientBrand: data.client_brand,
       },
     });
 
@@ -84,6 +87,17 @@ export async function POST(request: NextRequest) {
           creatorId: creator.id,
           type: 'target-brands',
           data: JSON.stringify(data.brands),
+        },
+      });
+    }
+
+    // Store client brand if provided (for competitor detection)
+    if (data.client_brand) {
+      await db.attachment.create({
+        data: {
+          creatorId: creator.id,
+          type: 'client-brand',
+          data: JSON.stringify({ brand: data.client_brand }),
         },
       });
     }

@@ -103,21 +103,29 @@ async function executeQuery(yql: string): Promise<VespaSearchResponse> {
  *
  * @param handle - Creator handle (with or without @)
  * @param limit - Maximum number of posts to return
+ * @param monthsBack - Number of months to look back (default: 6)
  * @returns Array of posts with transcripts
  */
 export async function queryTranscriptsByHandle(
   handle: string,
-  limit: number = 100
+  limit: number = 100,
+  monthsBack: number = 6
 ): Promise<VespaPost[]> {
   // Normalize handle (remove @ if present)
   const normalizedHandle = handle.startsWith('@') ? handle.slice(1) : handle;
 
-  // YQL query to fetch posts by handle
+  // Calculate cutoff timestamp (Unix seconds)
+  const cutoffDate = new Date();
+  cutoffDate.setMonth(cutoffDate.getMonth() - monthsBack);
+  const cutoffTimestamp = Math.floor(cutoffDate.getTime() / 1000);
+
+  // YQL query to fetch posts by handle with time filtering
   // Note: Vespa may store handles with or without @, so we try both
   const yql = `
     select id, handle, transcription_text, caption, platform, posted_at_ts, asset_url, preview_url, permalink
     from sources post
-    where handle contains "${normalizedHandle}" or handle contains "@${normalizedHandle}"
+    where (handle contains "${normalizedHandle}" or handle contains "@${normalizedHandle}")
+      and posted_at_ts > ${cutoffTimestamp}
     order by posted_at_ts desc
     limit ${limit}
   `.trim().replace(/\s+/g, ' ');

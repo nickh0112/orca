@@ -29,19 +29,15 @@ async function fetchFromVespa(
   monthsBack: number
 ): Promise<SocialMediaContent | null> {
   try {
-    const vespaPosts = await queryTranscriptsByHandle(handle, MAX_POSTS_PER_PLATFORM);
+    // Pass monthsBack to Vespa query for server-side time filtering
+    const vespaPosts = await queryTranscriptsByHandle(handle, MAX_POSTS_PER_PLATFORM, monthsBack);
 
     if (vespaPosts.length === 0) {
       return null;
     }
 
-    // Filter by platform and time
-    const cutoffTime = Date.now() - monthsBack * 30 * 24 * 60 * 60 * 1000;
-    const filteredPosts = vespaPosts.filter(
-      (p) =>
-        p.platform === platform &&
-        p.posted_at_ts * 1000 > cutoffTime
-    );
+    // Filter by platform (Vespa already filters by time)
+    const filteredPosts = vespaPosts.filter((p) => p.platform === platform);
 
     if (filteredPosts.length === 0) {
       return null;
