@@ -14,6 +14,7 @@ const mockPosts: SocialMediaPost[] = [
     timestamp: new Date().toISOString(),
     permalink: 'https://instagram.com/p/test1',
     mediaType: 'image',
+    engagement: {},
   },
   {
     id: 'test-2',
@@ -21,6 +22,7 @@ const mockPosts: SocialMediaPost[] = [
     timestamp: new Date().toISOString(),
     permalink: 'https://instagram.com/p/test2',
     mediaType: 'image',
+    engagement: {},
   },
   {
     id: 'test-3',
@@ -29,6 +31,7 @@ const mockPosts: SocialMediaPost[] = [
     permalink: 'https://instagram.com/p/test3',
     mediaType: 'image',
     transcript: 'So today I want to talk about the election. I think it\'s really important that everyone gets out and votes. The current administration has done some controversial things...',
+    engagement: {},
   },
   {
     id: 'test-4',
@@ -37,6 +40,7 @@ const mockPosts: SocialMediaPost[] = [
     permalink: 'https://instagram.com/p/test4',
     mediaType: 'video',
     transcript: 'Last night was crazy, we were drinking all night. Let me show you how to mix this cocktail...',
+    engagement: {},
   },
   {
     id: 'test-5',
@@ -44,6 +48,7 @@ const mockPosts: SocialMediaPost[] = [
     timestamp: new Date().toISOString(),
     permalink: 'https://instagram.com/p/test5',
     mediaType: 'image',
+    engagement: {},
   },
 ];
 
@@ -63,6 +68,7 @@ async function main() {
     platform: 'instagram',
     handle: 'test_creator',
     posts: mockPosts,
+    fetchedAt: new Date().toISOString(),
   };
 
   console.log(`\n📊 Testing with ${mockPosts.length} mock posts...`);

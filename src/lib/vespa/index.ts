@@ -220,6 +220,26 @@ export async function getPostById(id: string): Promise<VespaPost | null> {
 }
 
 /**
+ * Infer media type from Vespa post
+ * Most Vespa content is video (since we transcribe videos), but images may be included
+ */
+function inferMediaType(post: VespaPost): 'image' | 'video' | 'carousel' {
+  // If there's a transcription, it's definitely a video
+  if (post.transcription_text && post.transcription_text.length > 0) {
+    return 'video';
+  }
+
+  // Check URL patterns for clues
+  const url = post.asset_url || post.preview_url || '';
+  if (url.includes('.jpg') || url.includes('.jpeg') || url.includes('.png') || url.includes('.webp')) {
+    return 'image';
+  }
+
+  // Default to video for social media content (Instagram Reels, TikToks, YouTube)
+  return 'video';
+}
+
+/**
  * Convert Vespa posts to SocialMediaContent format for use in Orca's analysis
  */
 export function convertVespaPostsToSocialMediaContent(
@@ -235,6 +255,9 @@ export function convertVespaPostsToSocialMediaContent(
     permalink: string;
     timestamp: string;
     engagement: Record<string, never>;
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    mediaType?: 'image' | 'video' | 'carousel';
   }>;
   fetchedAt: string;
   source: 'vespa';
@@ -259,6 +282,9 @@ export function convertVespaPostsToSocialMediaContent(
       permalink: post.permalink || '',
       timestamp: new Date(post.posted_at_ts * 1000).toISOString(),
       engagement: {}, // Vespa doesn't store engagement metrics
+      mediaUrl: post.asset_url,
+      thumbnailUrl: post.preview_url || post.asset_url, // Fallback to asset_url if no preview
+      mediaType: inferMediaType(post),
     })),
     fetchedAt: new Date().toISOString(),
     source: 'vespa',
