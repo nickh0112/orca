@@ -11,7 +11,10 @@ import {
   fetchAllSocialMedia,
   analyzeSocialMediaContent,
   convertAnalysisToFindings,
+  extractBrandPartnerships,
+  buildPartnershipReport,
 } from '@/lib/social-media';
+import type { BrandPartnership } from '@/types/social-media';
 import { detectProfanity } from '@/lib/profanity';
 import { searchFlaggedTopics, isGoogleSearchConfigured } from '@/lib/google-search';
 import { convertBrandResults, convertKeywordResults, convertWebSearchResults } from '@/lib/v1-adapter';
@@ -167,6 +170,7 @@ export async function GET(
           // Analyze social media content for brand safety concerns
           let socialMediaFindings: typeof exaFindings = [];
           let socialMediaAnalyses: Awaited<ReturnType<typeof analyzeSocialMediaContent>> = [];
+          let allBrandPartnerships: BrandPartnership[] = [];
 
           if (socialMediaContent.length > 0) {
             const totalPosts = socialMediaContent.reduce((sum, c) => sum + c.posts.length, 0);
@@ -175,7 +179,7 @@ export async function GET(
               socialMediaAnalyses = await analyzeSocialMediaContent(socialMediaContent, creator.name);
               socialMediaFindings = convertAnalysisToFindings(socialMediaAnalyses);
 
-              // Run profanity detection on each platform's content
+              // Run profanity detection and brand partnership extraction on each platform's content
               for (const platformContent of socialMediaContent) {
                 const platform = platformContent.platform;
                 let platformStatus: PlatformStatus = 'READY';
@@ -198,12 +202,14 @@ export async function GET(
                     }, platform);
                   }
 
-                  // Get brand results for this platform from the analysis
-                  const platformAnalysis = socialMediaAnalyses.find(a => a.platform === platform);
-                  if (platformAnalysis) {
-                    // Note: Brand/keyword results are already integrated in the analysis
-                    // We could extract and save them separately here if needed
-                  }
+                  // Extract brand partnerships from posts
+                  console.log(`Extracting brand partnerships from ${platformContent.posts.length} ${platform} posts...`);
+                  const platformPartnerships = await extractBrandPartnerships(
+                    platformContent.posts,
+                    platform
+                  );
+                  allBrandPartnerships.push(...platformPartnerships);
+                  console.log(`Found ${platformPartnerships.length} brand partnerships on ${platform}`);
                 } catch (error) {
                   console.error(`Error processing ${platform} for ${creator.name}:`, error);
                   platformStatus = 'FAILED';
@@ -213,6 +219,14 @@ export async function GET(
                 await updatePlatformStatus(creator.id, platform as 'instagram' | 'youtube' | 'tiktok', platformStatus);
               }
             }
+          }
+
+          // Build and save brand partnership report
+          // TODO: competitors will be populated in Phase 3
+          const partnershipReport = buildPartnershipReport(allBrandPartnerships, []);
+          if (partnershipReport.totalPartnerships > 0) {
+            console.log(`Saving brand partnership report: ${partnershipReport.totalPartnerships} partnerships with ${partnershipReport.uniqueBrands.length} unique brands`);
+            await saveAttachment(creator.id, 'brand-partnerships', partnershipReport);
           }
 
           // Aggregate profanity results
@@ -252,6 +266,7 @@ export async function GET(
                 socialMedia: socialMediaContent,
                 socialMediaAnalyses: socialMediaAnalyses,
                 profanity: aggregatedProfanity,
+                brandPartnerships: partnershipReport,
               }),
               searchQueries: JSON.stringify([...queries, ...googleResult.queries]),
             },
@@ -271,6 +286,8 @@ export async function GET(
             summary: rationale,
             profanityDetected: aggregatedProfanity.hasProfanity,
             googleResults: googleResult.results.length,
+            brandPartnerships: partnershipReport.totalPartnerships,
+            uniqueBrands: partnershipReport.uniqueBrands.length,
           });
 
           return { success: true };

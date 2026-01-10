@@ -14,7 +14,13 @@ export { fetchInstagram } from './instagram';
 export { fetchTikTok } from './tiktok';
 export { fetchYouTube } from './youtube';
 export { analyzeSocialMediaContent, convertAnalysisToFindings, getSocialMediaAnalysisSummary } from './analyzer';
-export { detectBrands, detectBrandsBatch, aggregateBrands } from './brand-detector';
+export {
+  detectBrands,
+  detectBrandsBatch,
+  aggregateBrands,
+  extractBrandPartnerships,
+  buildPartnershipReport,
+} from './brand-detector';
 export { detectSensitiveKeywords, detectKeywordsBatch, aggregateKeywordResults, getDefaultKeywords, getSeverityColor } from './keyword-detector';
 
 /**

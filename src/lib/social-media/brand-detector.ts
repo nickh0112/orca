@@ -1,5 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { BrandMention, BrandDetectionResult } from '@/types/social-media';
+import type {
+  BrandMention,
+  BrandDetectionResult,
+  BrandPartnership,
+  BrandPartnershipReport,
+  PartnershipType,
+  SocialMediaPost,
+} from '@/types/social-media';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -22,6 +29,11 @@ const AD_PHRASES = [
   'sponsored by', 'brought to you by', 'paid promotion', 'gifted by',
   'use my code', 'use code', 'discount code', 'affiliate link',
 ];
+
+// Indicators for different partnership types
+const GIFTED_INDICATORS = ['gifted', 'pr', 'sent me', 'sent to try'];
+const AFFILIATE_INDICATORS = ['use code', 'use my code', 'discount code', 'affiliate', 'link in bio', 'swipe up'];
+const SPONSORED_INDICATORS = ['ad', 'sponsored', 'paid', 'partnership', 'ambassador', 'collab'];
 
 // Retry configuration
 const CONFIG = {
@@ -272,5 +284,175 @@ export function aggregateBrands(
     sponsoredBrands: Array.from(sponsoredBrands),
     hasAds,
     brandCounts,
+  };
+}
+
+/**
+ * Determine the partnership type based on indicators found in content
+ */
+function determinePartnershipType(
+  content: string,
+  isSponsored: boolean
+): PartnershipType {
+  const lowerContent = content.toLowerCase();
+
+  // Check for affiliate indicators first (most specific)
+  if (AFFILIATE_INDICATORS.some((ind) => lowerContent.includes(ind))) {
+    return 'affiliate';
+  }
+
+  // Check for gifted indicators
+  if (GIFTED_INDICATORS.some((ind) => lowerContent.includes(ind))) {
+    return 'gifted';
+  }
+
+  // Check for sponsored indicators or if already marked as sponsored
+  if (isSponsored || SPONSORED_INDICATORS.some((ind) => lowerContent.includes(ind))) {
+    return 'sponsored';
+  }
+
+  // Default to organic mention
+  return 'organic_mention';
+}
+
+/**
+ * Extract all ad/partnership indicators from content
+ */
+function extractAllIndicators(content: string): string[] {
+  const lowerContent = content.toLowerCase();
+  const indicators: string[] = [];
+
+  // Check hashtags
+  const hashtags = content.match(/#(\w+)/g);
+  if (hashtags) {
+    for (const hashtag of hashtags) {
+      const tag = hashtag.slice(1).toLowerCase();
+      if (AD_HASHTAGS.includes(tag)) {
+        indicators.push(hashtag);
+      }
+    }
+  }
+
+  // Check phrases
+  for (const phrase of AD_PHRASES) {
+    if (lowerContent.includes(phrase)) {
+      indicators.push(phrase);
+    }
+  }
+
+  return indicators;
+}
+
+/**
+ * Convert brand detection results to partnership format for a single post
+ */
+function convertToPartnerships(
+  post: SocialMediaPost,
+  brandResult: BrandDetectionResult,
+  platform: 'instagram' | 'tiktok' | 'youtube'
+): BrandPartnership[] {
+  const content = post.caption + (post.transcript ? '\n' + post.transcript : '');
+  const indicators = extractAllIndicators(content);
+
+  return brandResult.brands.map((brand) => ({
+    brand: brand.brand,
+    postId: post.id,
+    postDate: post.timestamp,
+    permalink: post.permalink,
+    platform,
+    partnershipType: determinePartnershipType(content, brand.isSponsored),
+    indicators,
+    confidence: brand.confidence,
+    context: brand.context,
+    thumbnailUrl: post.thumbnailUrl,
+  }));
+}
+
+/**
+ * Extract brand partnerships from all posts
+ * This is the main function for comprehensive brand history
+ */
+export async function extractBrandPartnerships(
+  posts: SocialMediaPost[],
+  platform: 'instagram' | 'tiktok' | 'youtube'
+): Promise<BrandPartnership[]> {
+  const partnerships: BrandPartnership[] = [];
+
+  // Process posts in batches to manage API rate limits
+  for (const post of posts) {
+    const content = post.caption + (post.transcript ? '\n' + post.transcript : '');
+
+    if (!content || content.trim().length === 0) {
+      continue;
+    }
+
+    const brandResult = await detectBrands(content, platform);
+
+    if (brandResult.brands.length > 0) {
+      const postPartnerships = convertToPartnerships(post, brandResult, platform);
+      partnerships.push(...postPartnerships);
+    }
+
+    // Small delay between posts
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  // Sort by date (newest first)
+  partnerships.sort((a, b) => new Date(b.postDate).getTime() - new Date(a.postDate).getTime());
+
+  return partnerships;
+}
+
+/**
+ * Build comprehensive brand partnership report from partnerships
+ */
+export function buildPartnershipReport(
+  partnerships: BrandPartnership[],
+  competitors: string[] = []
+): BrandPartnershipReport {
+  // Normalize competitor names for comparison
+  const competitorSet = new Set(competitors.map((c) => c.toLowerCase()));
+
+  // Mark competitor partnerships
+  const processedPartnerships = partnerships.map((p) => ({
+    ...p,
+    isCompetitor: competitorSet.has(p.brand.toLowerCase()),
+  }));
+
+  // Group by brand
+  const byBrand: Record<string, BrandPartnership[]> = {};
+  for (const partnership of processedPartnerships) {
+    const key = partnership.brand.toLowerCase();
+    if (!byBrand[key]) {
+      byBrand[key] = [];
+    }
+    byBrand[key].push(partnership);
+  }
+
+  // Group by platform
+  const byPlatform: Record<string, BrandPartnership[]> = {};
+  for (const partnership of processedPartnerships) {
+    if (!byPlatform[partnership.platform]) {
+      byPlatform[partnership.platform] = [];
+    }
+    byPlatform[partnership.platform].push(partnership);
+  }
+
+  // Extract unique brands (preserving original casing from first occurrence)
+  const seenBrands = new Map<string, string>();
+  for (const partnership of processedPartnerships) {
+    const key = partnership.brand.toLowerCase();
+    if (!seenBrands.has(key)) {
+      seenBrands.set(key, partnership.brand);
+    }
+  }
+
+  return {
+    totalPartnerships: processedPartnerships.length,
+    uniqueBrands: Array.from(seenBrands.values()),
+    timeline: processedPartnerships,
+    byBrand,
+    byPlatform,
+    competitorPartnerships: processedPartnerships.filter((p) => p.isCompetitor),
   };
 }

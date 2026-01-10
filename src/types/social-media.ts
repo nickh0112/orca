@@ -73,6 +73,33 @@ export interface BrandDetectionResult {
   summary: string;
 }
 
+// Brand partnership types for comprehensive brand history
+
+export type PartnershipType = 'sponsored' | 'gifted' | 'affiliate' | 'organic_mention';
+
+export interface BrandPartnership {
+  brand: string;
+  postId: string;
+  postDate: string;
+  permalink: string;
+  platform: 'instagram' | 'tiktok' | 'youtube';
+  partnershipType: PartnershipType;
+  indicators: string[];  // e.g., ['#ad', 'use code']
+  confidence: 'high' | 'medium' | 'low';
+  context: string;  // Relevant quote from post
+  thumbnailUrl?: string;
+  isCompetitor?: boolean;  // Set during competitor detection
+}
+
+export interface BrandPartnershipReport {
+  totalPartnerships: number;
+  uniqueBrands: string[];
+  timeline: BrandPartnership[];
+  byBrand: Record<string, BrandPartnership[]>;
+  byPlatform: Record<string, BrandPartnership[]>;
+  competitorPartnerships: BrandPartnership[];
+}
+
 // Keyword detection types
 
 export interface KeywordMatch {
