@@ -119,6 +119,24 @@ export interface V1FullReportResponse {
   };
   ai_summary?: string;
 
+  // Brand partnership analysis
+  brand_analysis?: {
+    client_brand: string | null;
+    competitors_detected: string[];
+    total_partnerships: number;
+    competitor_partnerships: number;
+    unique_brands: string[];
+    partnership_timeline: Array<{
+      brand: string;
+      date: string;
+      type: 'sponsored' | 'gifted' | 'affiliate' | 'organic_mention';
+      platform: 'instagram' | 'tiktok' | 'youtube';
+      is_competitor: boolean;
+      confidence: 'high' | 'medium' | 'low';
+      post_url: string;
+    }>;
+  };
+
   created_at: string;
   completed_at: string | null;
 }
@@ -361,6 +379,38 @@ export function buildFullReportResponse(
       )
     : { results: [], summary: '' };
 
+  // Parse brand partnership report
+  interface BrandPartnershipData {
+    totalPartnerships: number;
+    uniqueBrands: string[];
+    timeline: Array<{
+      brand: string;
+      postDate: string;
+      partnershipType: 'sponsored' | 'gifted' | 'affiliate' | 'organic_mention';
+      platform: 'instagram' | 'tiktok' | 'youtube';
+      isCompetitor?: boolean;
+      confidence: 'high' | 'medium' | 'low';
+      permalink: string;
+    }>;
+    competitorPartnerships: Array<unknown>;
+  }
+  const brandPartnerships = attachmentMap.get('brand-partnerships')
+    ? parseAttachmentData<BrandPartnershipData>(attachmentMap.get('brand-partnerships')!, {
+        totalPartnerships: 0,
+        uniqueBrands: [],
+        timeline: [],
+        competitorPartnerships: [],
+      })
+    : null;
+
+  // Parse competitor brands
+  const competitorData = attachmentMap.get('competitor-brands')
+    ? parseAttachmentData<{ clientBrand: string; competitors: string[] }>(
+        attachmentMap.get('competitor-brands')!,
+        { clientBrand: '', competitors: [] }
+      )
+    : null;
+
   // Parse findings for risk level
   const findings = report?.findings
     ? parseAttachmentData<{ severity: string }[]>(report.findings, [])
@@ -418,6 +468,26 @@ export function buildFullReportResponse(
       : undefined,
 
     ai_summary: report?.summary ?? undefined,
+
+    // Brand partnership analysis
+    brand_analysis: brandPartnerships
+      ? {
+          client_brand: competitorData?.clientBrand || creator.clientBrand || null,
+          competitors_detected: competitorData?.competitors || [],
+          total_partnerships: brandPartnerships.totalPartnerships,
+          competitor_partnerships: brandPartnerships.competitorPartnerships.length,
+          unique_brands: brandPartnerships.uniqueBrands,
+          partnership_timeline: brandPartnerships.timeline.map((p) => ({
+            brand: p.brand,
+            date: p.postDate,
+            type: p.partnershipType,
+            platform: p.platform,
+            is_competitor: p.isCompetitor || false,
+            confidence: p.confidence,
+            post_url: p.permalink,
+          })),
+        }
+      : undefined,
 
     created_at: creator.createdAt.toISOString(),
     completed_at: creator.status === 'COMPLETED' ? creator.updatedAt.toISOString() : null,
