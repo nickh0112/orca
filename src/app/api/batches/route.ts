@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to create batch:', error);
     return NextResponse.json(
-      { error: 'Failed to create batch' },
+      { error: 'Failed to create batch', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
