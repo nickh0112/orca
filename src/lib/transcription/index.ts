@@ -1,6 +1,17 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy-initialize OpenAI client to avoid build-time errors
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI | null {
+  if (!process.env.OPENAI_API_KEY) {
+    return null;
+  }
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+}
 
 export interface TranscriptionResult {
   text: string;
@@ -24,7 +35,8 @@ export async function transcribeFromUrl(
   mediaUrl: string,
   filename: string = 'media.mp4'
 ): Promise<TranscriptionResult | null> {
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAI();
+  if (!openai) {
     console.log('OpenAI API key not configured, skipping transcription');
     return null;
   }
