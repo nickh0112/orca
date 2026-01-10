@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   ShieldQuestion,
   ShieldAlert,
+  Briefcase,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Finding, ConfidenceLevel, PersonMatch } from '@/types';
@@ -23,6 +24,7 @@ const typeConfig = {
   social_controversy: { icon: MessageCircleWarning, label: 'Social Media', color: 'text-yellow-400' },
   social_post: { icon: Instagram, label: 'Social Post', color: 'text-pink-400' },
   reddit_mention: { icon: MessageSquare, label: 'Reddit', color: 'text-orange-400' },
+  competitor_partnership: { icon: Briefcase, label: 'Competitor', color: 'text-red-400' },
   other: { icon: AlertCircle, label: 'Other', color: 'text-zinc-400' },
 };
 

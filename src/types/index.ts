@@ -6,8 +6,9 @@ export type FindingType =
   | 'court_case'
   | 'news_article'
   | 'social_controversy'
-  | 'social_post'      // Direct content from creator's social media
-  | 'reddit_mention'   // Reddit discussion about creator
+  | 'social_post'           // Direct content from creator's social media
+  | 'reddit_mention'        // Reddit discussion about creator
+  | 'competitor_partnership' // Partnership with a competitor brand
   | 'other';
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 

@@ -21,6 +21,7 @@ export {
   extractBrandPartnerships,
   buildPartnershipReport,
 } from './brand-detector';
+export { identifyCompetitors, isCompetitor, clearCompetitorCache } from './competitor-detector';
 export { detectSensitiveKeywords, detectKeywordsBatch, aggregateKeywordResults, getDefaultKeywords, getSeverityColor } from './keyword-detector';
 
 /**

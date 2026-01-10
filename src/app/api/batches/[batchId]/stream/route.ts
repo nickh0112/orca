@@ -13,8 +13,10 @@ import {
   convertAnalysisToFindings,
   extractBrandPartnerships,
   buildPartnershipReport,
+  identifyCompetitors,
 } from '@/lib/social-media';
 import type { BrandPartnership } from '@/types/social-media';
+import type { Finding } from '@/types';
 import { detectProfanity } from '@/lib/profanity';
 import { searchFlaggedTopics, isGoogleSearchConfigured } from '@/lib/google-search';
 import { convertBrandResults, convertKeywordResults, convertWebSearchResults } from '@/lib/v1-adapter';
@@ -221,11 +223,26 @@ export async function GET(
             }
           }
 
-          // Build and save brand partnership report
-          // TODO: competitors will be populated in Phase 3
-          const partnershipReport = buildPartnershipReport(allBrandPartnerships, []);
+          // Identify competitors if client brand is provided
+          let competitors: string[] = [];
+          if (creator.clientBrand) {
+            console.log(`Identifying competitors for client brand: ${creator.clientBrand}`);
+            competitors = await identifyCompetitors(creator.clientBrand);
+            if (competitors.length > 0) {
+              await saveAttachment(creator.id, 'competitor-brands', {
+                clientBrand: creator.clientBrand,
+                competitors,
+              });
+            }
+          }
+
+          // Build and save brand partnership report with competitor flagging
+          const partnershipReport = buildPartnershipReport(allBrandPartnerships, competitors);
           if (partnershipReport.totalPartnerships > 0) {
             console.log(`Saving brand partnership report: ${partnershipReport.totalPartnerships} partnerships with ${partnershipReport.uniqueBrands.length} unique brands`);
+            if (partnershipReport.competitorPartnerships.length > 0) {
+              console.log(`⚠️ Found ${partnershipReport.competitorPartnerships.length} competitor partnerships!`);
+            }
             await saveAttachment(creator.id, 'brand-partnerships', partnershipReport);
           }
 
@@ -242,8 +259,32 @@ export async function GET(
             await saveAttachment(creator.id, 'profanity', aggregatedProfanity);
           }
 
+          // Create competitor findings from partnership report
+          const competitorFindings: Finding[] = partnershipReport.competitorPartnerships.map((partnership) => ({
+            type: 'competitor_partnership' as const,
+            title: `Competitor Partnership: ${partnership.brand}`,
+            summary: `Creator has a ${partnership.partnershipType} partnership with ${partnership.brand}, a competitor to ${creator.clientBrand}. Post date: ${new Date(partnership.postDate).toLocaleDateString()}. ${partnership.context.slice(0, 200)}${partnership.context.length > 200 ? '...' : ''}`,
+            severity: 'high' as const,
+            source: {
+              url: partnership.permalink,
+              title: `${partnership.platform.charAt(0).toUpperCase() + partnership.platform.slice(1)} post with ${partnership.brand}`,
+              publishedDate: partnership.postDate,
+            },
+            validation: {
+              isSamePerson: 'yes' as const,
+              confidence: partnership.confidence,
+              reason: `Brand partnership detected with competitor ${partnership.brand}. Indicators: ${partnership.indicators.join(', ') || 'brand mention'}`,
+            },
+            socialMediaSource: {
+              platform: partnership.platform,
+              handle: '', // Not stored in partnership
+              postId: partnership.postId,
+              thumbnailUrl: partnership.thumbnailUrl,
+            },
+          }));
+
           // Merge all findings
-          const findings = [...exaFindings, ...socialMediaFindings];
+          const findings = [...exaFindings, ...socialMediaFindings, ...competitorFindings];
           const riskLevel = calculateRiskLevel(findings);
 
           // Generate AI rationale summary
@@ -288,6 +329,7 @@ export async function GET(
             googleResults: googleResult.results.length,
             brandPartnerships: partnershipReport.totalPartnerships,
             uniqueBrands: partnershipReport.uniqueBrands.length,
+            competitorPartnerships: partnershipReport.competitorPartnerships.length,
           });
 
           return { success: true };
