@@ -253,6 +253,19 @@ The report UI uses a **split-minimal** design:
 
 ## Recent Changes (Update this section!)
 
+### 2026-01-10 - UI Cleanup to Match Minimal Design
+- Updated dashboard (`/src/app/page.tsx`) with minimal design
+  - Replaced StatCard components with inline stats
+  - Simplified team/personal toggle styling
+  - Minimal row design for recent batches with status dots
+- Updated batches list (`/src/app/batches/page.tsx`)
+  - Replaced BatchCard/BatchTabs with minimal row design
+  - Status dots instead of icons, mine/all toggle
+- Updated new batch form (`/src/app/batches/new/page.tsx`)
+  - Removed Card wrapper components
+  - Used `border-b border-zinc-900` for section dividers
+  - Simpler collapsible sections
+
 ### 2026-01-09 - Split Minimal UI Implementation
 - Created 5 split view prototypes for testing different aesthetics
 - Implemented split-minimal design on actual batch and creator pages
@@ -309,4 +322,4 @@ git push
 
 ---
 
-*Last updated: 2026-01-09 by Claude Opus 4.5*
+*Last updated: 2026-01-10 by Claude Opus 4.5*

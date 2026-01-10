@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users, Calendar, TrendingUp, CheckCircle, ExternalLink, User, UsersRound } from 'lucide-react';
+import { User, UsersRound, Loader2 } from 'lucide-react';
 import { useUserEmail } from '@/hooks/use-user-email';
-import { StatCard } from '@/components/dashboard/stat-card';
-import { TeamTable } from '@/components/dashboard/team-table';
 import { RiskChart } from '@/components/dashboard/risk-chart';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { Spinner } from '@/components/ui/spinner';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
+import type { BatchStatus } from '@/types';
 
 interface DashboardStats {
   summary: {
@@ -45,25 +44,24 @@ interface DashboardStats {
   }>;
 }
 
-const statusColors: Record<string, string> = {
-  COMPLETED: 'bg-green-500/10 text-green-400',
-  PROCESSING: 'bg-yellow-500/10 text-yellow-400',
-  PENDING: 'bg-zinc-500/10 text-zinc-400',
-  FAILED: 'bg-red-500/10 text-red-400',
-};
+function getStatusDot(status: string): string {
+  switch (status) {
+    case 'COMPLETED':
+      return 'bg-emerald-500';
+    case 'PROCESSING':
+      return 'bg-blue-500 animate-pulse';
+    case 'FAILED':
+      return 'bg-red-500';
+    default:
+      return 'bg-zinc-600';
+  }
+}
 
-const riskScoreLabels: Record<number, { label: string; color: string }> = {
-  1: { label: 'Low', color: 'text-green-400' },
-  2: { label: 'Medium', color: 'text-yellow-400' },
-  3: { label: 'High', color: 'text-orange-400' },
-  4: { label: 'Critical', color: 'text-red-400' },
-};
-
-function getRiskLabel(score: number) {
-  if (score < 1.5) return riskScoreLabels[1];
-  if (score < 2.5) return riskScoreLabels[2];
-  if (score < 3.5) return riskScoreLabels[3];
-  return riskScoreLabels[4];
+function getRiskLabel(score: number): { label: string; color: string } {
+  if (score < 1.5) return { label: 'Low', color: 'text-emerald-500' };
+  if (score < 2.5) return { label: 'Medium', color: 'text-amber-500' };
+  if (score < 3.5) return { label: 'High', color: 'text-orange-500' };
+  return { label: 'Critical', color: 'text-red-500' };
 }
 
 type ViewMode = 'team' | 'personal';
@@ -83,7 +81,10 @@ export default function DashboardPage() {
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
-        setStats(data);
+        // Ensure data has the expected structure
+        if (data && data.summary) {
+          setStats(data);
+        }
         setIsLoading(false);
       })
       .catch(() => setIsLoading(false));
@@ -105,26 +106,28 @@ export default function DashboardPage() {
     );
   }
 
-  const riskInfo = getRiskLabel(stats.summary.avgRiskScore);
+  const riskInfo = stats.summary.avgRiskScore > 0
+    ? getRiskLabel(stats.summary.avgRiskScore)
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-950">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-
-        {/* View Toggle */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold text-zinc-50">
-            {viewMode === 'personal' ? 'My Performance' : 'Team Dashboard'}
-          </h1>
+      <div className="max-w-4xl mx-auto px-8 py-16">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-16">
+          <div>
+            <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">
+              {viewMode === 'personal' ? 'My Performance' : 'Team Dashboard'}
+            </h1>
+            <p className="text-zinc-600 text-sm">Creator vetting overview</p>
+          </div>
           {hasEmail && (
-            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
+            <div className="flex items-center gap-4 text-sm">
               <button
                 onClick={() => setViewMode('team')}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  viewMode === 'team'
-                    ? 'bg-zinc-800 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                  'flex items-center gap-2 transition-colors',
+                  viewMode === 'team' ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-400'
                 )}
               >
                 <UsersRound className="w-4 h-4" />
@@ -133,10 +136,8 @@ export default function DashboardPage() {
               <button
                 onClick={() => setViewMode('personal')}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  viewMode === 'personal'
-                    ? 'bg-zinc-800 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                  'flex items-center gap-2 transition-colors',
+                  viewMode === 'personal' ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-400'
                 )}
               >
                 <User className="w-4 h-4" />
@@ -146,100 +147,132 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard
-            title="Total Creators Vetted"
-            value={stats.summary.totalCreators}
-            icon={Users}
-          />
-          <StatCard
-            title="Batches This Month"
-            value={stats.summary.batchesThisMonth}
-            icon={Calendar}
-          />
-          <StatCard
-            title="Avg Risk Level"
-            value={stats.summary.avgRiskScore > 0 ? stats.summary.avgRiskScore.toFixed(1) : '-'}
-            subtitle={stats.summary.avgRiskScore > 0 ? riskInfo.label : 'No data'}
-            icon={TrendingUp}
-          />
-          <StatCard
-            title="Success Rate"
-            value={`${stats.summary.successRate}%`}
-            icon={CheckCircle}
-          />
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-12 mb-16">
+          <div>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Creators Vetted</p>
+            <p className="text-2xl text-zinc-200 font-light">{stats.summary.totalCreators}</p>
+          </div>
+          <div>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Batches This Month</p>
+            <p className="text-2xl text-zinc-200 font-light">{stats.summary.batchesThisMonth}</p>
+          </div>
+          <div>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Avg Risk Level</p>
+            <p className={cn('text-2xl font-light', riskInfo?.color || 'text-zinc-500')}>
+              {riskInfo ? riskInfo.label : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">Success Rate</p>
+            <p className="text-2xl text-zinc-200 font-light">{stats.summary.successRate}%</p>
+          </div>
         </div>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        {/* Charts */}
+        <div className="grid grid-cols-2 gap-8 mb-16">
           <RiskChart data={stats.riskDistribution} />
           <TrendChart data={stats.activityTrend} />
         </div>
 
-        {/* Team Activity - only show in team view */}
-        {viewMode === 'team' && (
-          <div className="mb-8">
-            <h2 className="text-lg font-medium text-zinc-200 mb-4">Team Activity</h2>
-            <TeamTable data={stats.teamActivity} />
+        {/* Team Activity - minimal table */}
+        {viewMode === 'team' && stats.teamActivity.length > 0 && (
+          <div className="mb-16">
+            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">Team Activity</p>
+            <div className="space-y-px">
+              {stats.teamActivity.map((member) => (
+                <div key={member.userEmail} className="flex items-center py-4 border-b border-zinc-900">
+                  <div className="flex-1">
+                    <span className="text-zinc-300">{member.userEmail}</span>
+                  </div>
+                  <div className="w-24 text-right">
+                    <span className="text-zinc-500 text-sm">{member.batchCount} batches</span>
+                  </div>
+                  <div className="w-32 text-right">
+                    <span className="text-zinc-500 text-sm">{member.creatorCount} creators</span>
+                  </div>
+                  <div className="w-24 text-right">
+                    <span className={cn(
+                      'text-sm',
+                      member.completionRate >= 90 ? 'text-emerald-500' :
+                      member.completionRate >= 70 ? 'text-amber-500' : 'text-red-500'
+                    )}>
+                      {member.completionRate}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Recent Batches */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-zinc-200">
+          <div className="flex items-center justify-between mb-6">
+            <p className="text-zinc-600 text-xs uppercase tracking-wider">
               {viewMode === 'personal' ? 'My Recent Batches' : 'Recent Batches'}
-            </h2>
+            </p>
             <Link
               href="/batches"
-              className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+              className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors"
             >
               View all →
             </Link>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            {stats.recentBatches.length > 0 ? (
-              <div className="divide-y divide-zinc-800/50">
-                {stats.recentBatches.slice(0, 5).map((batch) => (
-                  <Link
-                    key={batch.id}
-                    href={`/batches/${batch.id}`}
-                    className="flex items-center justify-between px-6 py-4 hover:bg-zinc-800/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-zinc-200">
-                          {batch.name}
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          {batch.creatorCount} creators • {batch.userEmail || 'Unknown'}
-                        </p>
-                      </div>
+
+          {stats.recentBatches.length > 0 ? (
+            <div className="space-y-px">
+              {stats.recentBatches.slice(0, 5).map((batch) => (
+                <Link
+                  key={batch.id}
+                  href={`/batches/${batch.id}`}
+                  className="block group"
+                >
+                  <div className="flex items-center py-5 border-b border-zinc-900 hover:border-zinc-800 transition-colors">
+                    {/* Status dot */}
+                    <div className="w-12 flex justify-center">
+                      {batch.status === 'PROCESSING' ? (
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                      ) : (
+                        <div className={cn('w-2 h-2 rounded-full', getStatusDot(batch.status))} />
+                      )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={cn(
-                          'px-2 py-1 rounded text-xs font-medium',
-                          statusColors[batch.status]
-                        )}
-                      >
-                        {batch.status}
+
+                    {/* Name */}
+                    <div className="flex-1">
+                      <span className="text-zinc-300 group-hover:text-zinc-100 transition-colors">
+                        {batch.name}
                       </span>
-                      <span className="text-xs text-zinc-500">
-                        {new Date(batch.createdAt).toLocaleDateString()}
-                      </span>
-                      <ExternalLink className="w-4 h-4 text-zinc-500" />
                     </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="px-6 py-8 text-center">
-                <p className="text-zinc-400">No batches yet</p>
-              </div>
-            )}
-          </div>
+
+                    {/* Creators */}
+                    <div className="w-28 text-right">
+                      <span className="text-zinc-600 text-sm">{batch.creatorCount} creators</span>
+                    </div>
+
+                    {/* Date */}
+                    <div className="w-28 text-right">
+                      <span className="text-zinc-700 text-sm">{formatDate(new Date(batch.createdAt))}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center">
+              <p className="text-zinc-600 text-sm">No batches yet</p>
+            </div>
+          )}
+        </div>
+
+        {/* New Batch Link */}
+        <div className="mt-12 text-center">
+          <Link
+            href="/batches/new"
+            className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
+          >
+            + Create new batch
+          </Link>
         </div>
       </div>
     </div>

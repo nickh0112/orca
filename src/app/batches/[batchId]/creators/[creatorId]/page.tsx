@@ -156,7 +156,7 @@ export default function CreatorReportPage({
       const blob = await generateCreatorPdf({
         creatorName: creator.name,
         batchName: creator.batch.name,
-        socialLinks: creator.socialLinks,
+        socialLinks: creator.socialLinks || [],
         riskLevel: creator.report.riskLevel,
         summary: creator.report.summary,
         findings: creator.report.findings,
@@ -221,7 +221,7 @@ export default function CreatorReportPage({
   const recommendation = report ? getRecommendation(report.riskLevel) : null;
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
+    <div className="h-screen bg-zinc-950 flex flex-col">
       {/* Header */}
       <header className="border-b border-zinc-900 px-8 py-4">
         <div className="flex items-center justify-between">
@@ -443,13 +443,13 @@ export default function CreatorReportPage({
               )}
 
               {/* Social Profiles */}
-              {creator.socialLinks.length > 0 && (
+              {creator.socialLinks?.length > 0 && (
                 <div>
                   <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">
                     Social Profiles
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {creator.socialLinks.map((link, i) => (
+                    {(creator.socialLinks || []).map((link, i) => (
                       <a
                         key={i}
                         href={link}

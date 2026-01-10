@@ -87,6 +87,7 @@ export default function BatchDetailPage({
   const { results, resultsMap, isStreaming, isComplete, error, startStream } =
     useBatchStream(batchId);
 
+  // Fetch batch data initially and when streaming completes
   useEffect(() => {
     fetch(`/api/batches/${batchId}`)
       .then((res) => res.json())
@@ -96,6 +97,16 @@ export default function BatchDetailPage({
       })
       .catch(() => setIsLoading(false));
   }, [batchId]);
+
+  // Refetch batch data when streaming completes to get updated reports
+  useEffect(() => {
+    if (isComplete) {
+      fetch(`/api/batches/${batchId}`)
+        .then((res) => res.json())
+        .then((data) => setBatch(data))
+        .catch(console.error);
+    }
+  }, [batchId, isComplete]);
 
   const handleStartProcessing = async () => {
     setIsStarting(true);
