@@ -14,11 +14,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
+    "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.2.1",
     "@react-pdf/renderer": "^4.3.2",
     "clsx": "^2.1.1",
     "exa-js": "^2.0.12",
+    "gsap": "^3.14.2",
     "lucide-react": "^0.469.0",
     "natural": "^8.1.0",
     "next": "16.1.1",
