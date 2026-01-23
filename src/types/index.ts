@@ -21,6 +21,20 @@ export interface FindingValidation {
   reason?: string;
 }
 
+export interface VisualAnalysisData {
+  description: string;
+  brands: Array<{ brand: string; confidence: 'high' | 'medium' | 'low'; context: string }>;
+  actions: Array<{ action: string; isConcerning: boolean; reason?: string }>;
+  textInVideo: Array<{ text: string; context: string }>;
+  sceneContext: {
+    setting: string;
+    mood: string;
+    contentType: string;
+    concerns: string[];
+  };
+  brandSafetyRating: 'safe' | 'caution' | 'unsafe';
+}
+
 export interface Finding {
   type: FindingType;
   title: string;
@@ -45,6 +59,7 @@ export interface Finding {
     mediaUrl?: string;
     thumbnailUrl?: string;
     mediaType?: 'image' | 'video' | 'carousel';
+    visualAnalysis?: VisualAnalysisData;
   };
 }
 

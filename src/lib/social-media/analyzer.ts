@@ -9,6 +9,7 @@ import type { Finding, Severity } from '@/types';
 import { detectSensitiveKeywords, aggregateKeywordResults } from './keyword-detector';
 import { screenPostsWithHaiku, getScreeningSummary, ScreeningResult } from './haiku-screener';
 import { makeVettingDecisions, VettingResult, CreatorContext } from './vetting-agent';
+import { formatVisualAnalysisForPrompt } from '@/lib/video-analysis';
 
 // Configuration
 const CONFIG = {
@@ -16,12 +17,15 @@ const CONFIG = {
 };
 
 /**
- * Get combined content (caption + transcript) for a post
+ * Get combined content (caption + transcript + visual analysis) for a post
  */
 function getPostFullContent(post: SocialMediaPost): string {
   let content = post.caption || '';
   if (post.transcript && post.transcript.trim().length > 0) {
-    content += '\n\n' + post.transcript;
+    content += '\n\n[TRANSCRIPT]\n' + post.transcript;
+  }
+  if (post.visualAnalysis) {
+    content += '\n\n[VISUAL ANALYSIS]\n' + formatVisualAnalysisForPrompt(post.visualAnalysis);
   }
   return content;
 }
@@ -127,6 +131,7 @@ async function analyzePlatformContent(
         mediaUrl: originalPost?.mediaUrl,
         thumbnailUrl: originalPost?.thumbnailUrl,
         mediaType: originalPost?.mediaType,
+        visualAnalysis: originalPost?.visualAnalysis,
       };
     });
 
@@ -240,9 +245,12 @@ export async function analyzeSocialMediaContent(
       language
     );
 
-    // Calculate transcript coverage for logging
+    // Calculate transcript and visual analysis coverage for logging
     const postsWithTranscripts = source.posts.filter(
       (p) => p.transcript && p.transcript.trim().length > 0
+    ).length;
+    const postsWithVisualAnalysis = source.posts.filter(
+      (p) => p.visualAnalysis
     ).length;
 
     // Use vetting result's overall risk and recommendation
@@ -269,7 +277,7 @@ export async function analyzeSocialMediaContent(
 
     console.log(
       `\n[Summary] ${source.platform}/@${source.handle}:\n` +
-        `  → ${source.posts.length} posts analyzed (${postsWithTranscripts} with transcripts)\n` +
+        `  → ${source.posts.length} posts analyzed (${postsWithTranscripts} with transcripts, ${postsWithVisualAnalysis} with visual analysis)\n` +
         `  → ${keywordAggregated.allFlaggedTerms.length} keyword flags (local detection)\n` +
         `  → ${screenedCount} posts sent to senior review (Haiku screening)\n` +
         `  → ${result.flaggedPosts.length} confirmed risks (Opus vetting)\n` +
@@ -313,6 +321,7 @@ export function convertAnalysisToFindings(
           mediaUrl: flagged.mediaUrl,
           thumbnailUrl: flagged.thumbnailUrl,
           mediaType: flagged.mediaType,
+          visualAnalysis: flagged.visualAnalysis,
         },
       };
 

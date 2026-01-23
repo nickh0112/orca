@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useMemo, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download } from 'lucide-react';
+import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { cn, getPlatformFromUrl } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { generateCreatorPdf } from '@/components/report/creator-pdf';
+import { VisualAnalysisPanel, VisualAnalysisSummary } from '@/components/report/visual-analysis-panel';
 import type { Finding, RiskLevel } from '@/types';
 
 type Platform = 'instagram' | 'youtube' | 'tiktok' | 'web';
@@ -333,6 +334,19 @@ export default function CreatorReportPage({
                         <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-red-500" />
                       )}
 
+                      {/* Visual analysis indicators */}
+                      {finding.socialMediaSource?.visualAnalysis && (
+                        <div className="absolute bottom-1 left-1 flex gap-1">
+                          <Eye className="w-3 h-3 text-blue-400" />
+                          {finding.socialMediaSource.visualAnalysis.brands.length > 0 && (
+                            <Tag className="w-3 h-3 text-purple-400" />
+                          )}
+                          {finding.socialMediaSource.visualAnalysis.brandSafetyRating !== 'safe' && (
+                            <AlertTriangle className="w-3 h-3 text-amber-400" />
+                          )}
+                        </div>
+                      )}
+
                       {/* Hover overlay */}
                       <div className="absolute inset-0 bg-zinc-950/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
                         <span className="text-xs text-zinc-400 line-clamp-2">{finding.title}</span>
@@ -390,6 +404,13 @@ export default function CreatorReportPage({
 
                 {/* Summary */}
                 <p className="text-zinc-400 text-sm leading-relaxed">{selectedFinding.summary}</p>
+
+                {/* Visual Analysis */}
+                {selectedFinding.socialMediaSource?.visualAnalysis && (
+                  <div className="pt-4 border-t border-zinc-800">
+                    <VisualAnalysisPanel analysis={selectedFinding.socialMediaSource.visualAnalysis} />
+                  </div>
+                )}
 
                 {/* Source */}
                 <a
@@ -517,6 +538,9 @@ export default function CreatorReportPage({
                   </div>
                 </div>
               )}
+
+              {/* Visual Analysis Summary */}
+              <VisualAnalysisSummary findings={socialFindings} />
 
               {/* Risk Breakdown */}
               {report && (

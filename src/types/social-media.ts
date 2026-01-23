@@ -1,3 +1,5 @@
+import type { VisualAnalysis } from './video-analysis';
+
 // Platform-specific post types from API responses
 
 export interface InstagramPost {
@@ -55,6 +57,7 @@ export interface SocialMediaPost {
   mediaUrl?: string;       // Direct image/video URL
   thumbnailUrl?: string;   // Thumbnail for videos
   mediaType?: MediaType;
+  visualAnalysis?: VisualAnalysis;  // Twelve Labs visual analysis (brands, actions, text, scene context)
 }
 
 // Brand detection types
@@ -136,6 +139,7 @@ export interface FlaggedPost {
   mediaUrl?: string;
   thumbnailUrl?: string;
   mediaType?: MediaType;
+  visualAnalysis?: VisualAnalysis;
 }
 
 export interface SocialMediaAnalysis {

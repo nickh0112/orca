@@ -127,7 +127,28 @@
     "riskBreakdown": "Risk Breakdown",
     "viewSource": "View source",
     "creatorNotFound": "Creator not found",
-    "backToBatch": "Back to batch"
+    "backToBatch": "Back to batch",
+    "visualAnalysis": {
+      "title": "Visual Analysis",
+      "scene": "Scene",
+      "mood": "Mood",
+      "contentType": "Content type",
+      "brandsDetected": "Brands Detected",
+      "onScreenText": "On-Screen Text",
+      "visualConcerns": "Visual Concerns",
+      "confidence": {
+        "high": "high confidence",
+        "medium": "medium confidence",
+        "low": "low confidence"
+      },
+      "safety": {
+        "safe": "Safe",
+        "caution": "Caution",
+        "unsafe": "Unsafe"
+      },
+      "summaryTitle": "Visual Insights ({count} videos analyzed)",
+      "brandsAcrossVideos": "Brands detected across videos:"
+    }
   },
   "bulkImport": {
     "pasteFromSpreadsheet": "Paste from spreadsheet",

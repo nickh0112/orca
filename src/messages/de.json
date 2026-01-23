@@ -127,7 +127,28 @@
     "riskBreakdown": "Risikoaufteilung",
     "viewSource": "Quelle anzeigen",
     "creatorNotFound": "Creator nicht gefunden",
-    "backToBatch": "Zurück zum Stapel"
+    "backToBatch": "Zurück zum Stapel",
+    "visualAnalysis": {
+      "title": "Visuelle Analyse",
+      "scene": "Szene",
+      "mood": "Stimmung",
+      "contentType": "Inhaltstyp",
+      "brandsDetected": "Erkannte Marken",
+      "onScreenText": "Bildschirmtext",
+      "visualConcerns": "Visuelle Bedenken",
+      "confidence": {
+        "high": "hohe Zuverlässigkeit",
+        "medium": "mittlere Zuverlässigkeit",
+        "low": "niedrige Zuverlässigkeit"
+      },
+      "safety": {
+        "safe": "Sicher",
+        "caution": "Vorsicht",
+        "unsafe": "Unsicher"
+      },
+      "summaryTitle": "Visuelle Einblicke ({count} Videos analysiert)",
+      "brandsAcrossVideos": "Erkannte Marken in Videos:"
+    }
   },
   "bulkImport": {
     "pasteFromSpreadsheet": "Aus Tabelle einfügen",
