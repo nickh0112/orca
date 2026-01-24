@@ -71,7 +71,8 @@
     "processed": "{completed} of {total} processed",
     "failed": "{count} failed",
     "processing": "processing",
-    "completed": "completed"
+    "completed": "completed",
+    "pending": "pending"
   },
   "newBatch": {
     "title": "New Batch",

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ScreeningResult } from './haiku-screener';
 import { SocialMediaPost } from '@/types/social-media';
 import type { Severity } from '@/types';
+import { formatVisualAnalysisForPrompt } from '@/lib/video-analysis';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -120,11 +121,14 @@ Date: ${date}`;
         content += `\n\nTranscript Summary: ${result.transcriptSummary}`;
       }
 
-      // Include original caption/transcript for full context
+      // Include original caption/transcript/visual analysis for full context
       if (post) {
         content += `\n\nOriginal Caption:\n"${post.caption.slice(0, 300)}${post.caption.length > 300 ? '...' : ''}"`;
         if (post.transcript) {
           content += `\n\nOriginal Transcript:\n"${post.transcript.slice(0, 500)}${post.transcript.length > 500 ? '...' : ''}"`;
+        }
+        if (post.visualAnalysis) {
+          content += `\n\nVisual Analysis (from Twelve Labs):\n${formatVisualAnalysisForPrompt(post.visualAnalysis)}`;
         }
       }
 
@@ -198,6 +202,22 @@ IMPORTANT GUIDELINES:
 - Context matters. Sarcasm, jokes, and old content may not be genuine risks.
 - Consider the creator's audience and content type.
 - Only flag what would ACTUALLY concern a brand partnership team.
+- Visual analysis (if provided) reveals what the CAMERA sees - gestures, logos, settings. This can catch issues transcripts miss.
+- Weight visual concerns appropriately: a competitor logo worn prominently is more concerning than one briefly visible in background.
+
+BRAND/LOGO ANALYSIS GUIDELINES:
+- Review ALL detected brand logos carefully, especially those with timestamps
+- Brands marked [LIKELY SPONSOR] indicate prominent logo placement (potential undisclosed sponsorship)
+- Consider if detected brands could be COMPETITORS to potential partners:
+  * Fashion brands (Nike vs Adidas vs Puma)
+  * Tech brands (Apple vs Samsung vs Google)
+  * Beverage brands (Coca-Cola vs Pepsi)
+  * Etc.
+- Flag competitor concerns based on:
+  * Prominence of logo (primary > secondary > background)
+  * Duration of visibility (longer = more concerning)
+  * Context of appearance (wearing vs background vs explicit endorsement)
+- Note undisclosed sponsorships: If a brand is prominently featured but not disclosed as #ad, flag it
 
 Respond with ONLY valid JSON in this exact format:
 {

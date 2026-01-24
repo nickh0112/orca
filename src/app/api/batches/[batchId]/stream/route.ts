@@ -46,6 +46,8 @@ export async function GET(
 
   const stream = new ReadableStream({
     async start(controller) {
+      console.log('[DEBUG] SSE stream started for batch:', batchId);
+
       const sendEvent = (event: string, data: object) => {
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -99,6 +101,8 @@ export async function GET(
         monthsBack: number | null;
         clientBrand: string | null;
       }, searchTerms: string[]) => {
+        console.log('[DEBUG] Processing creator:', creator.name, 'status:', creator.status);
+
         // Skip already completed creators
         if (creator.status === 'COMPLETED') {
           return { skipped: true };

@@ -257,3 +257,17 @@ body {
     linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
   background-size: 100% 100%, 80px 80px, 80px 80px;
 }
+
+/* Shimmer effect for progress bars */
+@keyframes shimmer-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer-slide 1.5s ease-in-out infinite;
+}

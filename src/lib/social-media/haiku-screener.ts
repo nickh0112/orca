@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { SocialMediaPost } from '@/types/social-media';
+import { formatVisualAnalysisForPrompt } from '@/lib/video-analysis';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -17,10 +18,10 @@ const CONFIG = {
 
 // Types for screening results
 export interface PotentialIssue {
-  type: 'profanity' | 'controversial' | 'political' | 'brand_mention' | 'adult_content' | 'violence' | 'legal' | 'misinformation' | 'other';
+  type: 'profanity' | 'controversial' | 'political' | 'brand_mention' | 'adult_content' | 'violence' | 'legal' | 'misinformation' | 'visual' | 'other';
   text: string;
   context: string;
-  location: 'caption' | 'transcript';
+  location: 'caption' | 'transcript' | 'visual';
 }
 
 export interface ScreeningResult {
@@ -85,6 +86,13 @@ Caption: ${post.caption.slice(0, 500)}${post.caption.length > 500 ? '...' : ''}`
 Transcript: ${truncatedTranscript}${post.transcript.length > 1000 ? '...' : ''}`;
       }
 
+      // Include visual analysis if available (from Twelve Labs)
+      if (post.visualAnalysis) {
+        content += `
+Visual Analysis:
+${formatVisualAnalysisForPrompt(post.visualAnalysis)}`;
+      }
+
       return content;
     })
     .join('\n\n---\n\n');
@@ -143,15 +151,31 @@ For each post, extract:
    - Violence or threatening language
    - Legal issues (lawsuits, arrests, disputes)
    - Misinformation claims
+   - Inappropriate visual content (if visual analysis provided)
+   - Rude gestures or offensive actions (from visual analysis)
+   - Competitor logos/products visible (from visual analysis)
    - Other potentially problematic content
 
-2. **Brand Mentions** - List ALL brand names mentioned
+2. **Brand Mentions** - List ALL brand names mentioned (from caption, transcript, AND visual analysis)
+   - Include brands detected via logo recognition with their timestamps if available
+   - Note which brands appear to be sponsors (marked [LIKELY SPONSOR] in visual analysis)
+   - Flag any brands that could be competitors (prominent placement of other companies)
 
 3. **Ad Indicators** - Any signs of sponsored content:
    - #ad, #sponsored, #gifted, #partner
    - "Thanks to [brand]", "partnered with", "use code"
+   - Brands marked as [LIKELY SPONSOR] in visual analysis (prominent logo placement)
+   - Multiple appearances of the same brand logo
 
 4. **Transcript Summary** - If transcript exists, 1-2 sentence summary of what they're saying
+
+5. **Visual Concerns** - If visual analysis is provided, note any concerning:
+   - ALL detected brand logos with their time ranges (e.g., "Nike visible at 0:05-0:12")
+   - Brands marked as sponsors due to prominent placement
+   - Potential competitor brands that should be flagged
+   - Inappropriate actions or gestures
+   - Concerning scene context or settings
+   - On-screen text that's problematic
 
 DO NOT assign severity levels - that's the senior analyst's job. Just flag what MIGHT need review.
 
@@ -163,10 +187,10 @@ Format:
     "postId": "id_from_above",
     "potentialIssues": [
       {
-        "type": "profanity" | "controversial" | "political" | "brand_mention" | "adult_content" | "violence" | "legal" | "misinformation" | "other",
-        "text": "the exact problematic text",
+        "type": "profanity" | "controversial" | "political" | "brand_mention" | "adult_content" | "violence" | "legal" | "misinformation" | "visual" | "other",
+        "text": "the exact problematic text or visual element",
         "context": "brief context explaining why flagged",
-        "location": "caption" | "transcript"
+        "location": "caption" | "transcript" | "visual"
       }
     ],
     "transcriptSummary": "brief summary if transcript exists",
@@ -176,7 +200,7 @@ Format:
   }
 ]
 
-Set requiresSeniorReview to true if there are any potentialIssues, brand mentions with ad indicators, or anything else that warrants a closer look.`;
+Set requiresSeniorReview to true if there are any potentialIssues, brand mentions with ad indicators, visual safety concerns, or anything else that warrants a closer look.`;
 
   try {
     const response = await withRetry(async () => {

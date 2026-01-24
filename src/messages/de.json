@@ -71,7 +71,8 @@
     "processed": "{completed} von {total} verarbeitet",
     "failed": "{count} fehlgeschlagen",
     "processing": "wird verarbeitet",
-    "completed": "abgeschlossen"
+    "completed": "abgeschlossen",
+    "pending": "ausstehend"
   },
   "newBatch": {
     "title": "Neuer Stapel",

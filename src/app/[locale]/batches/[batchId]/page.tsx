@@ -2,10 +2,11 @@
 
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Play, RotateCcw, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, RotateCcw, Download, Loader2, LayoutGrid, Table as TableIcon } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useBatchStream } from '@/hooks/use-batch-stream';
 import { BatchProgress } from '@/components/batch/batch-progress';
+import { BatchTable } from '@/components/batch/batch-table';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
@@ -70,6 +71,7 @@ export default function BatchDetailPage({
   const [batch, setBatch] = useState<Batch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'list'>('table');
 
   const t = useTranslations('batchDetail');
   const tBatches = useTranslations('batches');
@@ -189,7 +191,7 @@ export default function BatchDetailPage({
           {tBatches('title').toLowerCase()}
         </Link>
 
-        <div className="mb-16">
+        <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">{batch.name}</h1>
@@ -199,6 +201,32 @@ export default function BatchDetailPage({
               </p>
             </div>
             <div className="flex items-center gap-3">
+              {/* View toggle */}
+              <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={cn(
+                    'p-1.5 rounded-md transition-colors',
+                    viewMode === 'table'
+                      ? 'bg-zinc-800 text-zinc-200'
+                      : 'text-zinc-500 hover:text-zinc-400'
+                  )}
+                >
+                  <TableIcon size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    'p-1.5 rounded-md transition-colors',
+                    viewMode === 'list'
+                      ? 'bg-zinc-800 text-zinc-200'
+                      : 'text-zinc-500 hover:text-zinc-400'
+                  )}
+                >
+                  <LayoutGrid size={16} />
+                </button>
+              </div>
+
               {canStart && (
                 <Button onClick={handleStartProcessing} disabled={isStarting} size="sm">
                   <Play className="w-4 h-4 mr-2" />
@@ -234,76 +262,88 @@ export default function BatchDetailPage({
           </div>
         )}
 
-        <div className="space-y-px">
-          {batch.creators.map((creator) => {
-            const streamResult = resultsMap.get(creator.id);
-            const effectiveStatus = streamResult?.status === 'processing' ? 'PROCESSING' : creator.status;
-            const riskLevel = streamResult?.riskLevel || creator.report?.riskLevel;
-            const verdict = getVerdict(riskLevel);
-            const statusDot = getStatusDot(effectiveStatus, riskLevel);
-            const findingsCount = streamResult?.findingsCount ?? getFindingsCount(creator.report?.findings);
-            const isProcessing = effectiveStatus === 'PROCESSING';
-            const isClickable = effectiveStatus === 'COMPLETED';
+        {/* Table View */}
+        {viewMode === 'table' && (
+          <BatchTable
+            creators={batch.creators}
+            batchId={batchId}
+            streamResultsMap={resultsMap}
+          />
+        )}
 
-            const content = (
-              <div className="flex items-center py-5 border-b border-zinc-900 hover:border-zinc-800 transition-colors">
-                {/* Status dot */}
-                <div className="w-16 flex justify-center">
-                  {isProcessing ? (
-                    <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                  ) : (
-                    <div className={cn('w-2 h-2 rounded-full', statusDot)} />
-                  )}
+        {/* List View (original) */}
+        {viewMode === 'list' && (
+          <div className="space-y-px">
+            {batch.creators.map((creator) => {
+              const streamResult = resultsMap.get(creator.id);
+              const effectiveStatus = streamResult?.status === 'processing' ? 'PROCESSING' : creator.status;
+              const riskLevel = streamResult?.riskLevel || creator.report?.riskLevel;
+              const verdict = getVerdict(riskLevel);
+              const statusDot = getStatusDot(effectiveStatus, riskLevel);
+              const findingsCount = streamResult?.findingsCount ?? getFindingsCount(creator.report?.findings);
+              const isProcessing = effectiveStatus === 'PROCESSING';
+              const isClickable = effectiveStatus === 'COMPLETED';
+
+              const content = (
+                <div className="flex items-center py-5 border-b border-zinc-900 hover:border-zinc-800 transition-colors">
+                  {/* Status dot */}
+                  <div className="w-16 flex justify-center">
+                    {isProcessing ? (
+                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                    ) : (
+                      <div className={cn('w-2 h-2 rounded-full', statusDot)} />
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <div className="flex-1 text-left">
+                    <span className={cn(
+                      'transition-colors',
+                      isClickable ? 'text-zinc-300 group-hover:text-zinc-100' : 'text-zinc-500'
+                    )}>
+                      {creator.name}
+                    </span>
+                  </div>
+
+                  {/* Verdict */}
+                  <div className="w-32 text-left">
+                    <span className={cn(
+                      'text-sm uppercase tracking-wider',
+                      effectiveStatus === 'COMPLETED' ? verdict.color : 'text-zinc-700'
+                    )}>
+                      {effectiveStatus === 'COMPLETED' ? verdict.text : t(effectiveStatus.toLowerCase() as 'processing' | 'completed')}
+                    </span>
+                  </div>
+
+                  {/* Flags */}
+                  <div className="w-20 text-right">
+                    <span className="text-zinc-600 text-sm">
+                      {effectiveStatus === 'COMPLETED' ? findingsCount : '—'}
+                    </span>
+                  </div>
                 </div>
-
-                {/* Name */}
-                <div className="flex-1 text-left">
-                  <span className={cn(
-                    'transition-colors',
-                    isClickable ? 'text-zinc-300 group-hover:text-zinc-100' : 'text-zinc-500'
-                  )}>
-                    {creator.name}
-                  </span>
-                </div>
-
-                {/* Verdict */}
-                <div className="w-32 text-left">
-                  <span className={cn(
-                    'text-sm uppercase tracking-wider',
-                    effectiveStatus === 'COMPLETED' ? verdict.color : 'text-zinc-700'
-                  )}>
-                    {effectiveStatus === 'COMPLETED' ? verdict.text : t(effectiveStatus.toLowerCase() as 'processing' | 'completed')}
-                  </span>
-                </div>
-
-                {/* Flags */}
-                <div className="w-20 text-right">
-                  <span className="text-zinc-600 text-sm">
-                    {effectiveStatus === 'COMPLETED' ? findingsCount : '—'}
-                  </span>
-                </div>
-              </div>
-            );
-
-            if (isClickable) {
-              return (
-                <Link
-                  key={creator.id}
-                  href={`/${locale}/batches/${batchId}/creators/${creator.id}`}
-                  className="block group"
-                >
-                  {content}
-                </Link>
               );
-            }
 
-            return (
-              <div key={creator.id} className="cursor-default">
-                {content}
-              </div>
-            );
-          })}
-        </div>
+              if (isClickable) {
+                return (
+                  <Link
+                    key={creator.id}
+                    href={`/${locale}/batches/${batchId}/creators/${creator.id}`}
+                    className="block group"
+                  >
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
+                <div key={creator.id} className="cursor-default">
+                  {content}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {isComplete && (
           <div className="mt-12 text-center">

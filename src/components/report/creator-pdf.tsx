@@ -73,6 +73,47 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1,
   },
+  // Risk meter visualization
+  riskMeterContainer: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  riskMeterBar: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  riskMeterSegment: {
+    height: '100%',
+  },
+  riskMeterLabel: {
+    fontSize: 9,
+    color: '#888888',
+  },
+  // Risk stats row
+  riskStatsRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 16,
+  },
+  riskStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  riskStatDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  riskStatText: {
+    fontSize: 9,
+    color: '#888888',
+  },
   content: {
     padding: 40,
   },
@@ -241,6 +282,53 @@ interface CreatorPdfProps {
   generatedAt: Date;
 }
 
+// Helper to count severity levels
+function countSeverities(findings: Finding[]) {
+  return {
+    critical: findings.filter(f => f.severity === 'critical').length,
+    high: findings.filter(f => f.severity === 'high').length,
+    medium: findings.filter(f => f.severity === 'medium').length,
+    low: findings.filter(f => f.severity === 'low').length,
+  };
+}
+
+// Risk meter component for the header
+function RiskMeter({ counts }: { counts: ReturnType<typeof countSeverities> }) {
+  const total = counts.critical + counts.high + counts.medium + counts.low;
+  if (total === 0) return null;
+
+  return (
+    <View style={styles.riskMeterContainer}>
+      <View style={styles.riskMeterBar}>
+        {counts.critical > 0 && (
+          <View style={[styles.riskMeterSegment, {
+            width: `${(counts.critical / total) * 100}%`,
+            backgroundColor: '#ef4444'
+          }]} />
+        )}
+        {counts.high > 0 && (
+          <View style={[styles.riskMeterSegment, {
+            width: `${(counts.high / total) * 100}%`,
+            backgroundColor: '#f97316'
+          }]} />
+        )}
+        {counts.medium > 0 && (
+          <View style={[styles.riskMeterSegment, {
+            width: `${(counts.medium / total) * 100}%`,
+            backgroundColor: '#eab308'
+          }]} />
+        )}
+        {counts.low > 0 && (
+          <View style={[styles.riskMeterSegment, {
+            width: `${(counts.low / total) * 100}%`,
+            backgroundColor: '#22c55e'
+          }]} />
+        )}
+      </View>
+    </View>
+  );
+}
+
 function CreatorPdfDocument({
   creatorName,
   batchName,
@@ -251,6 +339,7 @@ function CreatorPdfDocument({
   generatedAt,
 }: CreatorPdfProps) {
   const riskColor = riskColors[riskLevel];
+  const severityCounts = countSeverities(findings);
 
   return (
     <Document>
@@ -258,7 +347,7 @@ function CreatorPdfDocument({
         {/* Header Band */}
         <View style={styles.headerBand}>
           <View style={styles.brandRow}>
-            <Text style={styles.brandName}>WHALAR</Text>
+            <Text style={styles.brandName}>ORCA</Text>
             <Text style={styles.reportType}>Creator Vetting Report</Text>
           </View>
           <Text style={styles.title}>{creatorName}</Text>
@@ -267,6 +356,37 @@ function CreatorPdfDocument({
             <Text style={[styles.riskText, { color: riskColor.text }]}>
               {riskLevel} RISK
             </Text>
+          </View>
+
+          {/* Risk meter visualization */}
+          <RiskMeter counts={severityCounts} />
+
+          {/* Risk stats */}
+          <View style={styles.riskStatsRow}>
+            {severityCounts.critical > 0 && (
+              <View style={styles.riskStatItem}>
+                <View style={[styles.riskStatDot, { backgroundColor: '#ef4444' }]} />
+                <Text style={styles.riskStatText}>{severityCounts.critical} Critical</Text>
+              </View>
+            )}
+            {severityCounts.high > 0 && (
+              <View style={styles.riskStatItem}>
+                <View style={[styles.riskStatDot, { backgroundColor: '#f97316' }]} />
+                <Text style={styles.riskStatText}>{severityCounts.high} High</Text>
+              </View>
+            )}
+            {severityCounts.medium > 0 && (
+              <View style={styles.riskStatItem}>
+                <View style={[styles.riskStatDot, { backgroundColor: '#eab308' }]} />
+                <Text style={styles.riskStatText}>{severityCounts.medium} Medium</Text>
+              </View>
+            )}
+            {severityCounts.low > 0 && (
+              <View style={styles.riskStatItem}>
+                <View style={[styles.riskStatDot, { backgroundColor: '#22c55e' }]} />
+                <Text style={styles.riskStatText}>{severityCounts.low} Low</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -366,9 +486,9 @@ function CreatorPdfDocument({
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerBrand}>WHALAR</Text>
+          <Text style={styles.footerBrand}>ORCA</Text>
           <Text style={styles.footerText}>
-            Generated {generatedAt.toLocaleDateString()} at {generatedAt.toLocaleTimeString()}
+            Generated {generatedAt.toLocaleDateString()} at {generatedAt.toLocaleTimeString()} • Powered by AI
           </Text>
         </View>
       </Page>

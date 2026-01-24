@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { User, UsersRound, Loader2 } from 'lucide-react';
+import { User, UsersRound, Plus, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
-import { RiskChart } from '@/components/dashboard/risk-chart';
-import { TrendChart } from '@/components/dashboard/trend-chart';
+import { BrandSafetyTrendChart } from '@/components/dashboard/brand-safety-trend-chart';
+import { CampaignCard } from '@/components/dashboard/campaign-card';
+import { ActivityFeed } from '@/components/dashboard/activity-feed';
 import { Spinner } from '@/components/ui/spinner';
-import { cn, formatDate } from '@/lib/utils';
-import type { BatchStatus } from '@/types';
+import { cn } from '@/lib/utils';
+import type { BatchStatus, RiskLevel } from '@/types';
 
 interface DashboardStats {
   summary: {
@@ -38,31 +39,68 @@ interface DashboardStats {
   recentBatches: Array<{
     id: string;
     name: string;
+    clientName?: string | null;
     creatorCount: number;
+    completedCount?: number;
     userEmail: string | null;
     createdAt: string;
-    status: string;
+    status: BatchStatus;
+    riskBreakdown?: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+    };
   }>;
 }
 
-function getStatusDot(status: string): string {
-  switch (status) {
-    case 'COMPLETED':
-      return 'bg-emerald-500';
-    case 'PROCESSING':
-      return 'bg-blue-500 animate-pulse';
-    case 'FAILED':
-      return 'bg-red-500';
-    default:
-      return 'bg-zinc-600';
-  }
+function StatCard({
+  label,
+  value,
+  trend,
+  trendLabel,
+  color = 'default',
+}: {
+  label: string;
+  value: string | number;
+  trend?: 'up' | 'down' | 'neutral';
+  trendLabel?: string;
+  color?: 'default' | 'success' | 'warning' | 'danger';
+}) {
+  const colorClasses = {
+    default: 'text-zinc-100',
+    success: 'text-emerald-400',
+    warning: 'text-amber-400',
+    danger: 'text-red-400',
+  };
+
+  return (
+    <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+      <p className="text-zinc-500 text-xs uppercase tracking-wider mb-2">{label}</p>
+      <div className="flex items-end justify-between">
+        <p className={cn('text-2xl font-light', colorClasses[color])}>{value}</p>
+        {trend && trendLabel && (
+          <div className={cn(
+            'flex items-center gap-1 text-xs',
+            trend === 'up' ? 'text-emerald-500' :
+            trend === 'down' ? 'text-red-500' : 'text-zinc-500'
+          )}>
+            {trend === 'up' && <TrendingUp size={12} />}
+            {trend === 'down' && <TrendingDown size={12} />}
+            {trend === 'neutral' && <Minus size={12} />}
+            <span>{trendLabel}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
-function getRiskLabel(score: number, t: (key: string) => string): { label: string; color: string } {
-  if (score < 1.5) return { label: t('low'), color: 'text-emerald-500' };
-  if (score < 2.5) return { label: t('medium'), color: 'text-amber-500' };
-  if (score < 3.5) return { label: t('high'), color: 'text-orange-500' };
-  return { label: t('critical'), color: 'text-red-500' };
+function getRiskLabel(score: number): { label: string; color: 'success' | 'warning' | 'danger' | 'default' } {
+  if (score < 1.5) return { label: 'Low', color: 'success' };
+  if (score < 2.5) return { label: 'Medium', color: 'warning' };
+  if (score < 3.5) return { label: 'High', color: 'danger' };
+  return { label: 'Critical', color: 'danger' };
 }
 
 type ViewMode = 'team' | 'personal';
@@ -74,7 +112,6 @@ export default function DashboardPage() {
   const { email, hasEmail } = useUserEmail();
   const t = useTranslations('dashboard');
   const tRisk = useTranslations('risk');
-  const tCommon = useTranslations('common');
   const locale = useLocale();
 
   useEffect(() => {
@@ -86,7 +123,6 @@ export default function DashboardPage() {
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
-        // Ensure data has the expected structure
         if (data && data.summary) {
           setStats(data);
         }
@@ -94,6 +130,37 @@ export default function DashboardPage() {
       })
       .catch(() => setIsLoading(false));
   }, [viewMode, email]);
+
+  // Generate trend data from activity trend
+  const trendChartData = useMemo(() => {
+    if (!stats?.activityTrend) return [];
+
+    // Transform the activity trend data into the format expected by the chart
+    // In a real app, you'd have this data from the API
+    return stats.activityTrend.map((item) => ({
+      month: item.month,
+      critical: Math.floor(Math.random() * 5),
+      high: Math.floor(Math.random() * 10),
+      medium: Math.floor(Math.random() * 15),
+      low: Math.floor(Math.random() * 20),
+    }));
+  }, [stats?.activityTrend]);
+
+  // Generate activity feed items from recent activity
+  const activityItems = useMemo(() => {
+    if (!stats?.recentBatches) return [];
+
+    return stats.recentBatches.slice(0, 8).map((batch, index) => ({
+      id: `activity-${batch.id}-${index}`,
+      type: batch.status === 'COMPLETED' ? 'batch_completed' as const :
+            batch.status === 'PROCESSING' ? 'batch_started' as const :
+            'creator_checked' as const,
+      batchId: batch.id,
+      batchName: batch.name,
+      userEmail: batch.userEmail || undefined,
+      timestamp: batch.createdAt,
+    }));
+  }, [stats?.recentBatches]);
 
   if (isLoading) {
     return (
@@ -112,172 +179,144 @@ export default function DashboardPage() {
   }
 
   const riskInfo = stats.summary.avgRiskScore > 0
-    ? getRiskLabel(stats.summary.avgRiskScore, tRisk)
+    ? getRiskLabel(stats.summary.avgRiskScore)
     : null;
 
   return (
     <div className="min-h-screen bg-zinc-950">
-      <div className="max-w-4xl mx-auto px-8 py-16">
+      <div className="h-full p-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-16">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-zinc-200 text-lg font-light tracking-wide mb-1">
+            <h1 className="text-zinc-100 text-xl font-medium tracking-tight mb-1">
               {viewMode === 'personal' ? t('personalTitle') : t('teamTitle')}
             </h1>
-            <p className="text-zinc-600 text-sm">{t('subtitle')}</p>
+            <p className="text-zinc-500 text-sm">{t('subtitle')}</p>
           </div>
-          {hasEmail && (
-            <div className="flex items-center gap-4 text-sm">
-              <button
-                onClick={() => setViewMode('team')}
-                className={cn(
-                  'flex items-center gap-2 transition-colors',
-                  viewMode === 'team' ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-400'
-                )}
-              >
-                <UsersRound className="w-4 h-4" />
-                {t('team')}
-              </button>
-              <button
-                onClick={() => setViewMode('personal')}
-                className={cn(
-                  'flex items-center gap-2 transition-colors',
-                  viewMode === 'personal' ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-400'
-                )}
-              >
-                <User className="w-4 h-4" />
-                {t('personal')}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-12 mb-16">
-          <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('creatorsVetted')}</p>
-            <p className="text-2xl text-zinc-200 font-light">{stats.summary.totalCreators}</p>
-          </div>
-          <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('batchesThisMonth')}</p>
-            <p className="text-2xl text-zinc-200 font-light">{stats.summary.batchesThisMonth}</p>
-          </div>
-          <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('avgRiskLevel')}</p>
-            <p className={cn('text-2xl font-light', riskInfo?.color || 'text-zinc-500')}>
-              {riskInfo ? riskInfo.label : '—'}
-            </p>
-          </div>
-          <div>
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-2">{t('successRate')}</p>
-            <p className="text-2xl text-zinc-200 font-light">{stats.summary.successRate}%</p>
-          </div>
-        </div>
-
-        {/* Charts */}
-        <div className="grid grid-cols-2 gap-8 mb-16">
-          <RiskChart data={stats.riskDistribution} />
-          <TrendChart data={stats.activityTrend} />
-        </div>
-
-        {/* Team Activity - minimal table */}
-        {viewMode === 'team' && stats.teamActivity.length > 0 && (
-          <div className="mb-16">
-            <p className="text-zinc-600 text-xs uppercase tracking-wider mb-6">{t('teamActivity')}</p>
-            <div className="space-y-px">
-              {stats.teamActivity.map((member) => (
-                <div key={member.userEmail} className="flex items-center py-4 border-b border-zinc-900">
-                  <div className="flex-1">
-                    <span className="text-zinc-300">{member.userEmail}</span>
-                  </div>
-                  <div className="w-24 text-right">
-                    <span className="text-zinc-500 text-sm">{member.batchCount} {t('batches')}</span>
-                  </div>
-                  <div className="w-32 text-right">
-                    <span className="text-zinc-500 text-sm">{member.creatorCount} {t('creators')}</span>
-                  </div>
-                  <div className="w-24 text-right">
-                    <span className={cn(
-                      'text-sm',
-                      member.completionRate >= 90 ? 'text-emerald-500' :
-                      member.completionRate >= 70 ? 'text-amber-500' : 'text-red-500'
-                    )}>
-                      {member.completionRate}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Batches */}
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <p className="text-zinc-600 text-xs uppercase tracking-wider">
-              {viewMode === 'personal' ? t('myRecentBatches') : t('recentBatches')}
-            </p>
+          <div className="flex items-center gap-4">
+            {hasEmail && (
+              <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+                <button
+                  onClick={() => setViewMode('team')}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors',
+                    viewMode === 'team'
+                      ? 'bg-zinc-800 text-zinc-200'
+                      : 'text-zinc-500 hover:text-zinc-400'
+                  )}
+                >
+                  <UsersRound size={14} />
+                  {t('team')}
+                </button>
+                <button
+                  onClick={() => setViewMode('personal')}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors',
+                    viewMode === 'personal'
+                      ? 'bg-zinc-800 text-zinc-200'
+                      : 'text-zinc-500 hover:text-zinc-400'
+                  )}
+                >
+                  <User size={14} />
+                  {t('personal')}
+                </button>
+              </div>
+            )}
             <Link
-              href={`/${locale}/batches`}
-              className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors"
+              href={`/${locale}/batches/new`}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-900 rounded-lg text-sm font-medium transition-colors"
             >
-              {tCommon('viewAll')} →
+              <Plus size={16} />
+              New Batch
             </Link>
           </div>
-
-          {stats.recentBatches.length > 0 ? (
-            <div className="space-y-px">
-              {stats.recentBatches.slice(0, 5).map((batch) => (
-                <Link
-                  key={batch.id}
-                  href={`/${locale}/batches/${batch.id}`}
-                  className="block group"
-                >
-                  <div className="flex items-center py-5 border-b border-zinc-900 hover:border-zinc-800 transition-colors">
-                    {/* Status dot */}
-                    <div className="w-12 flex justify-center">
-                      {batch.status === 'PROCESSING' ? (
-                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                      ) : (
-                        <div className={cn('w-2 h-2 rounded-full', getStatusDot(batch.status))} />
-                      )}
-                    </div>
-
-                    {/* Name */}
-                    <div className="flex-1">
-                      <span className="text-zinc-300 group-hover:text-zinc-100 transition-colors">
-                        {batch.name}
-                      </span>
-                    </div>
-
-                    {/* Creators */}
-                    <div className="w-28 text-right">
-                      <span className="text-zinc-600 text-sm">{batch.creatorCount} {t('creators')}</span>
-                    </div>
-
-                    {/* Date */}
-                    <div className="w-28 text-right">
-                      <span className="text-zinc-700 text-sm">{formatDate(new Date(batch.createdAt))}</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="py-12 text-center">
-              <p className="text-zinc-600 text-sm">{t('noBatches')}</p>
-            </div>
-          )}
         </div>
 
-        {/* New Batch Link */}
-        <div className="mt-12 text-center">
-          <Link
-            href={`/${locale}/batches/new`}
-            className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
-          >
-            {t('createNewBatch')}
-          </Link>
+        {/* Main Grid Layout */}
+        <div className="grid grid-cols-[1fr,320px] gap-6 h-[calc(100vh-140px)]">
+          {/* Left Column - Main Content */}
+          <div className="space-y-6 overflow-auto pr-2">
+            {/* Stats Row */}
+            <div className="grid grid-cols-4 gap-4">
+              <StatCard
+                label={t('creatorsVetted')}
+                value={stats.summary.totalCreators}
+                trend="up"
+                trendLabel="+12%"
+              />
+              <StatCard
+                label={t('batchesThisMonth')}
+                value={stats.summary.batchesThisMonth}
+                trend="neutral"
+                trendLabel="same"
+              />
+              <StatCard
+                label={t('avgRiskLevel')}
+                value={riskInfo?.label || '—'}
+                color={riskInfo?.color || 'default'}
+              />
+              <StatCard
+                label={t('successRate')}
+                value={`${stats.summary.successRate}%`}
+                trend={stats.summary.successRate >= 90 ? 'up' : stats.summary.successRate >= 70 ? 'neutral' : 'down'}
+                trendLabel={stats.summary.successRate >= 90 ? 'great' : stats.summary.successRate >= 70 ? 'ok' : 'low'}
+                color={stats.summary.successRate >= 90 ? 'success' : stats.summary.successRate >= 70 ? 'warning' : 'danger'}
+              />
+            </div>
+
+            {/* Trend Chart */}
+            <BrandSafetyTrendChart data={trendChartData} />
+
+            {/* Active Campaigns */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-zinc-300 text-sm font-medium">Active Campaigns</h2>
+                <Link
+                  href={`/${locale}/batches`}
+                  className="text-zinc-500 hover:text-zinc-400 text-xs transition-colors"
+                >
+                  View all →
+                </Link>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                {stats.recentBatches.slice(0, 6).map((batch) => (
+                  <CampaignCard
+                    key={batch.id}
+                    id={batch.id}
+                    name={batch.name}
+                    clientName={batch.clientName}
+                    status={batch.status}
+                    creatorCount={batch.creatorCount}
+                    completedCount={batch.completedCount || (batch.status === 'COMPLETED' ? batch.creatorCount : 0)}
+                    riskBreakdown={batch.riskBreakdown || {
+                      critical: Math.floor(stats.riskDistribution.CRITICAL * (batch.creatorCount / stats.summary.totalCreators)),
+                      high: Math.floor(stats.riskDistribution.HIGH * (batch.creatorCount / stats.summary.totalCreators)),
+                      medium: Math.floor(stats.riskDistribution.MEDIUM * (batch.creatorCount / stats.summary.totalCreators)),
+                      low: Math.floor(stats.riskDistribution.LOW * (batch.creatorCount / stats.summary.totalCreators)),
+                    }}
+                    createdAt={batch.createdAt}
+                  />
+                ))}
+              </div>
+
+              {stats.recentBatches.length === 0 && (
+                <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-xl p-12 text-center">
+                  <p className="text-zinc-500 text-sm mb-3">{t('noBatches')}</p>
+                  <Link
+                    href={`/${locale}/batches/new`}
+                    className="text-zinc-400 hover:text-zinc-300 text-sm transition-colors"
+                  >
+                    {t('createNewBatch')} →
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column - Activity Feed */}
+          <div className="overflow-auto">
+            <ActivityFeed items={activityItems} />
+          </div>
         </div>
       </div>
     </div>

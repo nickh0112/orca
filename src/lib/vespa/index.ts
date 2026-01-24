@@ -5,13 +5,58 @@
  * This allows us to fetch existing transcripts instead of re-transcribing.
  */
 
+import * as https from 'https';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Cache for the HTTPS agent to avoid recreating it on every request
+let cachedAgent: https.Agent | null = null;
+
 // Read env vars at runtime (not module load time) to support dotenv
 function getVespaConfig() {
   return {
     url: process.env.VESPA_URL,
-    cert: process.env.VESPA_CERT,
-    key: process.env.VESPA_KEY,
+    certPath: process.env.VESPA_CERT_PATH,
+    keyPath: process.env.VESPA_KEY_PATH,
   };
+}
+
+/**
+ * Get or create an HTTPS agent with mTLS certificates
+ */
+function getHttpsAgent(): https.Agent | undefined {
+  const config = getVespaConfig();
+
+  // If no cert paths configured, return undefined (no mTLS)
+  if (!config.certPath || !config.keyPath) {
+    return undefined;
+  }
+
+  // Return cached agent if available
+  if (cachedAgent) {
+    return cachedAgent;
+  }
+
+  try {
+    // Resolve paths relative to project root
+    const certPath = path.resolve(process.cwd(), config.certPath);
+    const keyPath = path.resolve(process.cwd(), config.keyPath);
+
+    const cert = fs.readFileSync(certPath, 'utf8');
+    const key = fs.readFileSync(keyPath, 'utf8');
+
+    cachedAgent = new https.Agent({
+      cert,
+      key,
+      rejectUnauthorized: true, // Verify server certificate
+    });
+
+    console.log('[Vespa] mTLS agent configured successfully');
+    return cachedAgent;
+  } catch (error) {
+    console.error('[Vespa] Failed to load mTLS certificates:', error);
+    return undefined;
+  }
 }
 
 export interface VespaPost {
@@ -60,7 +105,7 @@ export function isVespaConfigured(): boolean {
 }
 
 /**
- * Execute a YQL query against Vespa
+ * Execute a YQL query against Vespa using https module for mTLS support
  */
 async function executeQuery(yql: string): Promise<VespaSearchResponse> {
   const config = getVespaConfig();
@@ -69,33 +114,56 @@ async function executeQuery(yql: string): Promise<VespaSearchResponse> {
     throw new Error('VESPA_URL not configured');
   }
 
-  const searchUrl = `${config.url}/search/`;
+  const searchUrl = new URL('/search/', config.url);
+  const agent = getHttpsAgent();
 
-  const requestOptions: RequestInit = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      yql,
-      timeout: '10s',
-    }),
-  };
+  const body = JSON.stringify({
+    yql,
+    timeout: '10s',
+  });
 
-  // For cloud Vespa with mTLS, we'd need to configure certificates
-  // Node.js fetch doesn't directly support client certificates
-  // For production, consider using a library like 'https' with cert options
-  // or a Vespa-specific client library
+  return new Promise((resolve, reject) => {
+    const options: https.RequestOptions = {
+      hostname: searchUrl.hostname,
+      port: searchUrl.port || 443,
+      path: searchUrl.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+      agent,
+    };
 
-  const response = await fetch(searchUrl, requestOptions);
+    const req = https.request(options, (res) => {
+      let data = '';
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Vespa query error:', errorText);
-    throw new Error(`Vespa query failed: ${response.status}`);
-  }
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
 
-  return response.json();
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            reject(new Error(`Failed to parse Vespa response: ${data}`));
+          }
+        } else {
+          console.error('Vespa query error:', data);
+          reject(new Error(`Vespa query failed: ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      console.error('Vespa request error:', error);
+      reject(error);
+    });
+
+    req.write(body);
+    req.end();
+  });
 }
 
 /**

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { Geist, Geist_Mono } from "next/font/google";
 import { locales } from '@/i18n/config';
 import { AppProvider } from "@/components/providers/app-provider";
-import { Navbar } from "@/components/layout/navbar";
+import { Sidebar } from "@/components/layout/sidebar";
 import "../globals.css";
 
 const geistSans = Geist({
@@ -41,8 +41,12 @@ export default async function LocaleLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <NextIntlClientProvider messages={messages}>
           <AppProvider>
-            <Navbar />
-            {children}
+            <div className="flex h-screen bg-zinc-950">
+              <Sidebar />
+              <main className="flex-1 overflow-auto">
+                {children}
+              </main>
+            </div>
           </AppProvider>
         </NextIntlClientProvider>
       </body>

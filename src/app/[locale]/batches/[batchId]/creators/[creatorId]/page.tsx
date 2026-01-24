@@ -311,9 +311,9 @@ export default function CreatorReportPage({
                       key={idx}
                       onClick={() => setSelectedFinding(finding)}
                       className={cn(
-                        'aspect-square relative bg-zinc-900 transition-all group',
-                        isSelected && 'ring-1 ring-zinc-600',
-                        isFlagged && 'ring-1 ring-red-900'
+                        'aspect-square relative bg-zinc-900 transition-all group overflow-hidden',
+                        isSelected && 'ring-2 ring-zinc-500',
+                        isFlagged && !isSelected && 'ring-2 ring-red-500/50'
                       )}
                     >
                       {/* Thumbnail or placeholder */}
@@ -324,32 +324,80 @@ export default function CreatorReportPage({
                           className="absolute inset-0 w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <PlatformIcon className="w-6 h-6 text-zinc-800" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800">
+                          <PlatformIcon className="w-8 h-8 text-zinc-700" />
                         </div>
                       )}
 
-                      {/* Severity indicator */}
-                      {isFlagged && (
-                        <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-red-500" />
-                      )}
+                      {/* Dark gradient overlay for better text readability */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-transparent to-transparent" />
 
-                      {/* Visual analysis indicators */}
+                      {/* Category labels overlay */}
                       {finding.socialMediaSource?.visualAnalysis && (
-                        <div className="absolute bottom-1 left-1 flex gap-1">
-                          <Eye className="w-3 h-3 text-blue-400" />
-                          {finding.socialMediaSource.visualAnalysis.brands.length > 0 && (
-                            <Tag className="w-3 h-3 text-purple-400" />
+                        <div className="absolute top-0 left-0 right-0 p-1.5 flex flex-wrap gap-1">
+                          {finding.socialMediaSource.visualAnalysis.sceneContext?.contentType && (
+                            <span className={cn(
+                              'px-1.5 py-0.5 text-[9px] font-medium rounded uppercase tracking-wide',
+                              finding.socialMediaSource.visualAnalysis.brandSafetyRating === 'unsafe'
+                                ? 'bg-red-500/90 text-white'
+                                : finding.socialMediaSource.visualAnalysis.brandSafetyRating === 'caution'
+                                ? 'bg-amber-500/90 text-zinc-900'
+                                : 'bg-zinc-800/90 text-zinc-300'
+                            )}>
+                              {finding.socialMediaSource.visualAnalysis.sceneContext.contentType}
+                            </span>
                           )}
-                          {finding.socialMediaSource.visualAnalysis.brandSafetyRating !== 'safe' && (
-                            <AlertTriangle className="w-3 h-3 text-amber-400" />
-                          )}
+                          {finding.socialMediaSource.visualAnalysis.sceneContext?.concerns?.slice(0, 1).map((concern, i) => (
+                            <span key={i} className="px-1.5 py-0.5 text-[9px] font-medium rounded uppercase tracking-wide bg-red-500/90 text-white">
+                              {concern.length > 12 ? concern.slice(0, 12) + '…' : concern}
+                            </span>
+                          ))}
                         </div>
                       )}
 
-                      {/* Hover overlay */}
-                      <div className="absolute inset-0 bg-zinc-950/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                        <span className="text-xs text-zinc-400 line-clamp-2">{finding.title}</span>
+                      {/* Bottom info bar */}
+                      <div className="absolute bottom-0 left-0 right-0 p-2">
+                        <div className="flex items-center justify-between">
+                          {/* Platform & severity */}
+                          <div className="flex items-center gap-1.5">
+                            <PlatformIcon className="w-3 h-3 text-white/70" />
+                            {isFlagged && (
+                              <span className={cn(
+                                'px-1 py-0.5 text-[8px] font-bold rounded uppercase',
+                                finding.severity === 'critical' ? 'bg-red-500 text-white' : 'bg-orange-500 text-white'
+                              )}>
+                                {finding.severity === 'critical' ? 'CRIT' : 'HIGH'}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Visual analysis indicators */}
+                          {finding.socialMediaSource?.visualAnalysis && (
+                            <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-0.5 px-1 py-0.5 bg-zinc-900/80 rounded">
+                                <Eye className="w-2.5 h-2.5 text-blue-400" />
+                              </div>
+                              {finding.socialMediaSource.visualAnalysis.brands.length > 0 && (
+                                <div className="flex items-center gap-0.5 px-1 py-0.5 bg-zinc-900/80 rounded">
+                                  <Tag className="w-2.5 h-2.5 text-purple-400" />
+                                  <span className="text-[8px] text-purple-300">
+                                    {finding.socialMediaSource.visualAnalysis.brands.length}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Hover overlay with full details */}
+                      <div className="absolute inset-0 bg-zinc-950/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                        <span className="text-[10px] text-zinc-400 line-clamp-3 leading-relaxed">{finding.title}</span>
+                        {finding.socialMediaSource?.visualAnalysis?.brands.slice(0, 2).map((brand, i) => (
+                          <span key={i} className="text-[9px] text-purple-400 mt-1">
+                            🏷 {brand.brand}
+                          </span>
+                        ))}
                       </div>
                     </button>
                   );
