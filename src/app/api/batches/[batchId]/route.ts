@@ -20,6 +20,7 @@ export async function GET(
                 id: true,
                 riskLevel: true,
                 summary: true,
+                findings: true,
               },
             },
           },
