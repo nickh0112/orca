@@ -13,8 +13,38 @@ export interface VisualAnalysis {
 export interface BrandDetection {
   brand: string;
   confidence: 'high' | 'medium' | 'low';
-  timestamp?: string;
+  confidenceScore?: number;       // 0-1 numeric score from logo detection
+  startTime?: number;             // seconds
+  endTime?: number;               // seconds
+  framePercentage?: number;       // % of frame occupied by logo
+  timestamp?: string;             // legacy field
   context: string;
+  detectionMethod?: 'visual' | 'text' | 'audio';
+  appearsSponsor?: boolean;       // appears to be sponsored content
+  isCompetitor?: boolean;         // flagged by user or agent as competitor
+}
+
+// Logo detection from Search API - shows ALL detected brands with timestamps
+export interface LogoDetection {
+  brand: string;
+  appearances: Array<{
+    startTime: number;
+    endTime: number;
+    confidence: number;
+    prominence?: 'primary' | 'secondary' | 'background';
+  }>;
+  totalDuration: number;          // Total seconds visible
+  likelySponsor: boolean;         // Prominent placement suggests sponsorship
+}
+
+// Content classification from Classify API
+export interface ContentClassification {
+  labels: Array<{
+    label: string;
+    duration: number;
+    confidence: number;
+  }>;
+  overallSafetyScore: number;     // 0-1 safety score
 }
 
 export interface ActionDetection {
@@ -60,6 +90,8 @@ export interface VideoAnalysisResult {
   transcript: TwelveLabsTranscript;
   visualAnalysis: VisualAnalysis;
   indexInfo: TwelveLabsIndexResult;
+  logoDetections?: LogoDetection[];           // All detected logos from Search API
+  contentClassification?: ContentClassification; // Content categories from Classify API
 }
 
 // Apify scraper result types
@@ -120,4 +152,68 @@ export interface ApifyRunResult<T> {
   items: T[];
   status: 'succeeded' | 'failed' | 'running';
   error?: string;
+}
+
+// Media analysis types for batch processing
+
+export type MediaType = 'video' | 'image';
+
+export interface MediaItem {
+  id: string;
+  type: MediaType;
+  url: string;
+  buffer?: Buffer;
+}
+
+export interface MediaAnalysisResult {
+  type: MediaType;
+  visualAnalysis: VisualAnalysis;
+  transcript?: TwelveLabsTranscript;
+  indexInfo?: TwelveLabsIndexResult;
+  logoDetections?: LogoDetection[];
+  contentClassification?: ContentClassification;
+}
+
+export interface MediaQueueOptions {
+  videoConcurrency?: number;  // Default: 5
+  imageConcurrency?: number;  // Default: 10
+  retries?: number;           // Default: 3
+  retryDelayMs?: number;      // Default: 1000
+  onProgress?: ProgressCallback;
+}
+
+export type ProgressCallback = (
+  completed: number,
+  total: number,
+  failed: number
+) => void;
+
+export interface ImageAnalysisOptions {
+  concurrency?: number;
+  onProgress?: ProgressCallback;
+}
+
+export interface VideoAnalysisOptions {
+  concurrency?: number;
+  skipLogoDetection?: boolean;
+  skipClassification?: boolean;
+  /** Analysis tier - overrides skip options */
+  tier?: 'light' | 'standard' | 'full';
+  onProgress?: ProgressCallback;
+}
+
+/**
+ * Pre-screening result for thumbnail analysis
+ */
+export interface PreScreenResult {
+  /** Whether this video needs full Twelve Labs analysis */
+  needsFullAnalysis: boolean;
+  /** Reason for the decision */
+  reason: 'safe' | 'brands_detected' | 'uncertain' | 'concerning' | 'error';
+  /** Brands detected in thumbnail (if any) */
+  detectedBrands?: string[];
+  /** Confidence in the pre-screen decision (0-1) */
+  confidence: number;
+  /** Brief description of thumbnail content */
+  thumbnailDescription?: string;
 }

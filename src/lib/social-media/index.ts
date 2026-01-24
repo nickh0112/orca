@@ -9,6 +9,19 @@ import {
   convertVespaPostsToSocialMediaContent,
   VespaPost,
 } from '@/lib/vespa';
+import {
+  isApifyConfigured,
+  fetchTikTokViaApify,
+  fetchInstagramViaApify,
+  downloadVideo,
+} from './apify';
+import {
+  isTwelveLabsConfigured,
+  isClaudeVisionConfigured,
+  analyzeAllMedia,
+  MediaType,
+  MediaAnalysisResult,
+} from '@/lib/video-analysis';
 
 export { fetchInstagram } from './instagram';
 export { fetchTikTok } from './tiktok';
@@ -23,6 +36,25 @@ export {
 } from './brand-detector';
 export { identifyCompetitors, isCompetitor, clearCompetitorCache } from './competitor-detector';
 export { detectSensitiveKeywords, detectKeywordsBatch, aggregateKeywordResults, getDefaultKeywords, getSeverityColor } from './keyword-detector';
+export {
+  isApifyConfigured,
+  fetchTikTokViaApify,
+  fetchInstagramViaApify,
+} from './apify';
+
+// Concurrency settings for parallel fetching
+const APIFY_CONCURRENCY = 5;
+
+/**
+ * Split an array into chunks of specified size
+ */
+function chunk<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
 
 /**
  * Fetch content from Vespa for a handle
@@ -77,13 +109,135 @@ async function fetchFromVespa(
 }
 
 /**
+ * Enrich posts with media analysis (videos via Twelve Labs, images via Claude Vision)
+ * Returns posts with transcript and visualAnalysis fields populated
+ * Uses batch processing with concurrency control for high throughput
+ */
+async function enrichWithMediaAnalysis(
+  posts: SocialMediaPost[]
+): Promise<SocialMediaPost[]> {
+  const twelveLabsAvailable = isTwelveLabsConfigured();
+  const claudeVisionAvailable = isClaudeVisionConfigured();
+
+  if (!twelveLabsAvailable && !claudeVisionAvailable) {
+    console.log('[Media Analysis] No analyzers configured, skipping enrichment');
+    return posts;
+  }
+
+  // Collect media items to analyze
+  const mediaItems: Array<{
+    id: string;
+    type: MediaType;
+    url: string;
+    buffer?: Buffer;
+  }> = [];
+
+  const postsWithMedia = posts.filter((p) => p.mediaUrl);
+
+  for (const post of postsWithMedia) {
+    const isVideo = post.mediaType === 'video';
+    const isImage = post.mediaType === 'image' || post.mediaType === 'carousel';
+
+    // Skip if we can't analyze this type
+    if (isVideo && !twelveLabsAvailable) continue;
+    if (isImage && !claudeVisionAvailable) continue;
+
+    // Skip posts that already have analysis
+    const postWithAnalysis = post as SocialMediaPost & { visualAnalysis?: unknown };
+    if (postWithAnalysis.visualAnalysis) continue;
+
+    if (isVideo || isImage) {
+      // Download video/image if needed
+      let buffer: Buffer | undefined;
+      if (isVideo) {
+        try {
+          const videoData = await downloadVideo(post.mediaUrl!);
+          buffer = videoData?.buffer;
+        } catch (error) {
+          console.warn(`[Media Analysis] Failed to download ${post.id}:`, error);
+        }
+      }
+
+      mediaItems.push({
+        id: post.id,
+        type: isVideo ? 'video' : 'image',
+        url: post.mediaUrl!,
+        buffer,
+      });
+    }
+  }
+
+  if (mediaItems.length === 0) {
+    console.log('[Media Analysis] No media items to analyze');
+    return posts;
+  }
+
+  const videoCount = mediaItems.filter((m) => m.type === 'video').length;
+  const imageCount = mediaItems.filter((m) => m.type === 'image').length;
+
+  console.log(
+    `[Media Analysis] Analyzing ${mediaItems.length} items: ` +
+      `${videoCount} videos, ${imageCount} images`
+  );
+
+  // Analyze all media with progress tracking
+  let completed = 0;
+  const results = await analyzeAllMedia(mediaItems, {
+    videoConcurrency: 5,
+    imageConcurrency: 10,
+    retries: 3,
+    onProgress: (done, total, failed) => {
+      if (done % 5 === 0 || done === total) {
+        console.log(`[Media Analysis] Progress: ${done}/${total} (${failed} failed)`);
+      }
+      completed = done;
+    },
+  });
+
+  // Merge results back into posts
+  const enrichedPosts = posts.map((post) => {
+    const result = results.get(post.id);
+    if (!result) return post;
+
+    const enriched: SocialMediaPost & { visualAnalysis?: unknown } = {
+      ...post,
+      visualAnalysis: result.visualAnalysis,
+    };
+
+    // Add transcript for videos
+    if (result.transcript?.text) {
+      enriched.transcript = result.transcript.text || post.transcript;
+    }
+
+    return enriched as SocialMediaPost;
+  });
+
+  const successCount = Array.from(results.values()).filter((r) => r !== null).length;
+  console.log(
+    `[Media Analysis] Enriched ${successCount}/${mediaItems.length} posts with analysis`
+  );
+
+  return enrichedPosts;
+}
+
+/**
  * Fetch social media content from all platforms
- * Strategy: Check Vespa first, fall back to platform APIs
+ *
+ * Strategy (in order of preference):
+ * 1. Try Vespa first (for pre-indexed content with transcripts)
+ * 2. Fall back to Apify scrapers (reliable video URLs)
+ * 3. Fall back to platform APIs (may have limitations)
+ * 4. Enrich videos with Twelve Labs analysis (if configured)
  */
 export async function fetchAllSocialMedia(
   socialLinks: string[],
-  monthsBack: number = 6
+  monthsBack: number = 6,
+  options: { enableTwelveLabs?: boolean } = {}
 ): Promise<SocialMediaContent[]> {
+  console.log('[DEBUG] fetchAllSocialMedia called with:', { socialLinks, monthsBack });
+
+  const { enableTwelveLabs = true } = options;
+
   // Extract handles from social links
   const handles = extractSocialHandles(socialLinks);
 
@@ -96,32 +250,65 @@ export async function fetchAllSocialMedia(
 
   const socialMediaContent: SocialMediaContent[] = [];
   const vespaConfigured = isVespaConfigured();
+  const apifyConfigured = isApifyConfigured();
+  const twelveLabsConfigured = isTwelveLabsConfigured();
+
+  // Log available integrations
+  console.log(
+    `[Config] Vespa: ${vespaConfigured ? 'YES' : 'NO'}, ` +
+      `Apify: ${apifyConfigured ? 'YES' : 'NO'}, ` +
+      `Twelve Labs: ${twelveLabsConfigured ? 'YES' : 'NO'}`
+  );
 
   if (vespaConfigured) {
     console.log('[Vespa] Checking for existing transcripts...');
   }
 
-  // Process each handle
-  for (const handle of handles) {
+  /**
+   * Process a single handle - extracted for parallel processing
+   */
+  async function processSingleHandle(handle: SocialHandle): Promise<SocialMediaContent | null> {
     let content: SocialMediaContent | null = null;
+    const platform = handle.platform as 'instagram' | 'tiktok' | 'youtube';
 
-    // Step 1: Try Vespa first if configured
+    // Step 1: Try Vespa first if configured (free, fast, has transcripts)
     if (vespaConfigured) {
-      content = await fetchFromVespa(
-        handle.handle,
-        handle.platform as 'instagram' | 'tiktok' | 'youtube',
-        monthsBack
-      );
+      content = await fetchFromVespa(handle.handle, platform, monthsBack);
     }
 
-    // Step 2: Fall back to platform API if not in Vespa
-    if (!content) {
+    // Step 2: Try Apify if Vespa miss and Apify is configured
+    // Apify provides reliable video URLs for TikTok/Instagram
+    if (!content && apifyConfigured && (platform === 'tiktok' || platform === 'instagram')) {
       console.log(
-        `[API] Fetching from ${handle.platform} API for @${handle.handle}`
+        `[Apify] Fetching from ${platform} scraper for @${handle.handle}`
       );
 
       try {
-        switch (handle.platform) {
+        if (platform === 'tiktok') {
+          content = await fetchTikTokViaApify(handle.handle, monthsBack);
+        } else if (platform === 'instagram') {
+          content = await fetchInstagramViaApify(handle.handle, monthsBack);
+        }
+
+        // Check if Apify returned useful results
+        if (content && content.posts.length === 0 && !content.error) {
+          console.log(`[Apify] No posts found for @${handle.handle}, falling back to platform API`);
+          content = null;
+        }
+      } catch (error) {
+        console.error(`[Apify] Fetch failed for ${handle.handle}:`, error);
+        content = null;
+      }
+    }
+
+    // Step 3: Fall back to platform API if not in Vespa/Apify
+    if (!content) {
+      console.log(
+        `[API] Fetching from ${platform} API for @${handle.handle}`
+      );
+
+      try {
+        switch (platform) {
           case 'instagram':
             content = await fetchInstagram(handle.handle, monthsBack);
             break;
@@ -137,8 +324,43 @@ export async function fetchAllSocialMedia(
       }
     }
 
-    if (content) {
-      socialMediaContent.push(content);
+    // Step 4: Enrich media with analysis (videos via Twelve Labs, images via Claude Vision)
+    if (content && enableTwelveLabs && (twelveLabsConfigured || isClaudeVisionConfigured())) {
+      const mediaWithoutAnalysis = content.posts.filter(
+        (p) =>
+          p.mediaUrl &&
+          (p.mediaType === 'video' || p.mediaType === 'image' || p.mediaType === 'carousel') &&
+          !(p as SocialMediaPost & { visualAnalysis?: unknown }).visualAnalysis
+      );
+
+      if (mediaWithoutAnalysis.length > 0) {
+        console.log(
+          `[Media Analysis] ${mediaWithoutAnalysis.length} media items need analysis for @${handle.handle}`
+        );
+        content = {
+          ...content,
+          posts: await enrichWithMediaAnalysis(content.posts),
+        };
+      }
+    }
+
+    return content;
+  }
+
+  // Process handles in parallel batches for faster throughput
+  console.log(`[Parallel] Processing ${handles.length} handles with concurrency ${APIFY_CONCURRENCY}`);
+  const handleBatches = chunk(handles, APIFY_CONCURRENCY);
+
+  for (const batch of handleBatches) {
+    const batchResults = await Promise.all(
+      batch.map(handle => processSingleHandle(handle))
+    );
+
+    // Collect successful results
+    for (const content of batchResults) {
+      if (content) {
+        socialMediaContent.push(content);
+      }
     }
   }
 
@@ -151,10 +373,18 @@ export async function fetchAllSocialMedia(
     (sum, content) => sum + content.posts.filter((p) => p.transcript).length,
     0
   );
+  const totalVisualAnalysis = socialMediaContent.reduce(
+    (sum, content) =>
+      sum +
+      content.posts.filter(
+        (p) => (p as SocialMediaPost & { visualAnalysis?: unknown }).visualAnalysis
+      ).length,
+    0
+  );
 
   console.log(
     `Fetched ${totalPosts} total posts from ${socialMediaContent.length} social media sources ` +
-      `(${totalTranscripts} with transcripts)`
+      `(${totalTranscripts} with transcripts, ${totalVisualAnalysis} with visual analysis)`
   );
 
   return socialMediaContent;
