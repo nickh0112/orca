@@ -154,21 +154,49 @@ async function indexVideoFromUrl(
 }
 
 /**
+ * Validate video buffer before upload
+ * Checks for minimum size and MP4 magic bytes
+ */
+function validateVideoBuffer(buffer: Buffer): { valid: boolean; error?: string } {
+  if (buffer.length < 12) {
+    return { valid: false, error: 'Buffer too small to be a valid video' };
+  }
+  // Check for MP4 magic bytes (ftyp at offset 4)
+  if (buffer.slice(4, 8).toString('ascii') === 'ftyp') {
+    return { valid: true };
+  }
+  // Check for WebM magic bytes (1A 45 DF A3 at offset 0)
+  if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+    return { valid: true };
+  }
+  // Allow other formats but log a warning
+  console.warn('[Twelve Labs] Unrecognized video format, proceeding anyway');
+  return { valid: true };
+}
+
+/**
  * Upload video buffer to Twelve Labs for indexing
  */
 async function indexVideoFromBuffer(
   indexId: string,
   buffer: Buffer,
-  filename: string = 'video.mp4'
+  filename: string = 'video.mp4',
+  contentType: string = 'video/mp4'
 ): Promise<{ taskId: string }> {
+  // Validate buffer before upload
+  const validation = validateVideoBuffer(buffer);
+  if (!validation.valid) {
+    throw new Error(`Invalid video buffer: ${validation.error}`);
+  }
+
   const formData = new FormData();
   formData.append('index_id', indexId);
-  // Convert Buffer to ArrayBuffer for Blob compatibility
-  const arrayBuffer = buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength
-  ) as ArrayBuffer;
-  formData.append('video_file', new Blob([arrayBuffer]), filename);
+
+  // Use Uint8Array for reliable buffer conversion + specify MIME type
+  const uint8Array = new Uint8Array(buffer);
+  const blob = new Blob([uint8Array], { type: contentType });
+
+  formData.append('video_file', blob, filename);
 
   const response = await fetch(`${TWELVE_LABS_API_BASE}/tasks`, {
     method: 'POST',
@@ -212,11 +240,16 @@ async function waitForIndexing(taskId: string): Promise<TwelveLabsIndexResult> {
     if (status === 'ready') {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`[Twelve Labs] Indexing complete in ${elapsed}s (${pollCount} polls)`);
+      // v1.3 API: Duration is in system_metadata, not metadata
+      const duration = data.system_metadata?.duration || data.metadata?.duration;
+      if (!duration) {
+        console.warn('[Twelve Labs] Duration not found in response (checked system_metadata and metadata)');
+      }
       return {
         indexId: data.index_id,
         videoId: data.video_id,
         status: 'ready',
-        duration: data.metadata?.duration,
+        duration,
       };
     }
 
@@ -258,20 +291,23 @@ async function waitForIndexing(taskId: string): Promise<TwelveLabsIndexResult> {
 
 /**
  * Get transcript from indexed video
+ * Note: v1.3 API uses query param instead of separate endpoint
  */
 async function getTranscript(
   indexId: string,
   videoId: string
 ): Promise<TwelveLabsTranscript> {
+  // v1.3 API: Use query param instead of separate /transcription endpoint
   const response = await fetch(
-    `${TWELVE_LABS_API_BASE}/indexes/${indexId}/videos/${videoId}/transcription`,
+    `${TWELVE_LABS_API_BASE}/indexes/${indexId}/videos/${videoId}?transcription=true`,
     {
       headers: getHeaders(),
     }
   );
 
   if (!response.ok) {
-    // Transcription might not be available
+    console.error(`[Twelve Labs] Failed to get transcript: ${response.status}`);
+    // Transcription might not be available for some videos
     if (response.status === 404) {
       return { text: '' };
     }
@@ -280,14 +316,22 @@ async function getTranscript(
 
   const data = await response.json();
 
-  return {
-    text: data.data?.map((seg: { value: string }) => seg.value).join(' ') || '',
-    segments: data.data?.map((seg: { value: string; start: number; end: number }) => ({
-      text: seg.value,
-      start: seg.start,
-      end: seg.end,
-    })),
-  };
+  // v1.3 API: Transcription is in data.transcription array (not data.data)
+  const transcription = data.transcription || [];
+
+  if (transcription.length === 0) {
+    console.log('[Twelve Labs] No transcription segments found (video may have no speech)');
+    return { text: '' };
+  }
+
+  const text = transcription.map((seg: { value: string }) => seg.value).join(' ');
+  const segments = transcription.map((seg: { value: string; start: number; end: number }) => ({
+    text: seg.value,
+    start: seg.start,
+    end: seg.end,
+  }));
+
+  return { text, segments };
 }
 
 /**
@@ -1022,11 +1066,13 @@ function mergeBrandDetections(
  *
  * @param videoUrl - Direct URL to the video file (must be downloadable)
  * @param videoBuffer - Optional: Pre-downloaded video buffer (use if URL doesn't work)
+ * @param contentType - Optional: MIME type of the video (defaults to 'video/mp4')
  * @returns Transcript + visual analysis results
  */
 export async function analyzeVideo(
   videoUrl: string,
-  videoBuffer?: Buffer
+  videoBuffer?: Buffer,
+  contentType: string = 'video/mp4'
 ): Promise<VideoAnalysisResult | null> {
   if (!isTwelveLabsConfigured()) {
     console.log('[Twelve Labs] API key not configured, skipping video analysis');
@@ -1043,8 +1089,8 @@ export async function analyzeVideo(
     let taskResult: { taskId: string };
 
     if (videoBuffer) {
-      console.log('[Twelve Labs] Uploading video buffer for indexing...');
-      taskResult = await indexVideoFromBuffer(indexId, videoBuffer);
+      console.log(`[Twelve Labs] Uploading video buffer for indexing (${contentType})...`);
+      taskResult = await indexVideoFromBuffer(indexId, videoBuffer, 'video.mp4', contentType);
     } else {
       console.log('[Twelve Labs] Indexing video from URL...');
       taskResult = await indexVideoFromUrl(indexId, videoUrl);
@@ -1172,7 +1218,8 @@ export interface VideoAnalysisOptionsInternal {
 export async function analyzeVideoWithOptions(
   videoUrl: string,
   videoBuffer?: Buffer,
-  options?: VideoAnalysisOptionsInternal
+  options?: VideoAnalysisOptionsInternal,
+  contentType: string = 'video/mp4'
 ): Promise<VideoAnalysisResult | null> {
   if (!isTwelveLabsConfigured()) {
     console.log('[Twelve Labs] API key not configured, skipping video analysis');
@@ -1203,6 +1250,8 @@ export async function analyzeVideoWithOptions(
 
   const tierLabel = tier || (skipLogoDetection && skipClassification ? 'light' : skipClassification ? 'standard' : 'full');
   console.log(`[Twelve Labs] Starting ${tierLabel} tier analysis...`);
+  console.log(`[Twelve Labs] Video URL: ${videoUrl.slice(0, 80)}...`);
+  console.log(`[Twelve Labs] Buffer provided: ${videoBuffer ? `${(videoBuffer.length / 1024 / 1024).toFixed(2)}MB` : 'none'}`);
 
   try {
     // Step 1: Get or create index (uses cache)
@@ -1212,8 +1261,8 @@ export async function analyzeVideoWithOptions(
     let taskResult: { taskId: string };
 
     if (videoBuffer) {
-      console.log('[Twelve Labs] Uploading video buffer for indexing...');
-      taskResult = await indexVideoFromBuffer(indexId, videoBuffer);
+      console.log(`[Twelve Labs] Uploading video buffer for indexing (${contentType})...`);
+      taskResult = await indexVideoFromBuffer(indexId, videoBuffer, 'video.mp4', contentType);
     } else {
       console.log('[Twelve Labs] Indexing video from URL...');
       taskResult = await indexVideoFromUrl(indexId, videoUrl);
