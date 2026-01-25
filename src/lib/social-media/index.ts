@@ -42,8 +42,8 @@ export {
   fetchInstagramViaApify,
 } from './apify';
 
-// Concurrency settings for parallel fetching
-const APIFY_CONCURRENCY = 5;
+// Concurrency settings for parallel fetching - increased for higher throughput
+const APIFY_CONCURRENCY = 15;
 
 /**
  * Split an array into chunks of specified size
@@ -370,20 +370,21 @@ export async function fetchAllSocialMedia(
     return content;
   }
 
-  // Process handles in parallel batches for faster throughput
-  console.log(`[Parallel] Processing ${handles.length} handles with concurrency ${APIFY_CONCURRENCY}`);
-  const handleBatches = chunk(handles, APIFY_CONCURRENCY);
+  // Process ALL handles truly in parallel for maximum throughput
+  // With upgraded API limits, we can handle higher concurrency
+  console.log(`[Parallel] Processing ${handles.length} handles concurrently (max ${APIFY_CONCURRENCY})`);
 
-  for (const batch of handleBatches) {
-    const batchResults = await Promise.all(
-      batch.map(handle => processSingleHandle(handle))
-    );
+  // Use Promise.allSettled to process all handles in parallel
+  const results = await Promise.allSettled(
+    handles.map(handle => processSingleHandle(handle))
+  );
 
-    // Collect successful results
-    for (const content of batchResults) {
-      if (content) {
-        socialMediaContent.push(content);
-      }
+  // Collect successful results
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value) {
+      socialMediaContent.push(result.value);
+    } else if (result.status === 'rejected') {
+      console.error('[Parallel] Handle processing failed:', result.reason);
     }
   }
 

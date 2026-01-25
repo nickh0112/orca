@@ -23,8 +23,8 @@ import { convertBrandResults, convertKeywordResults, convertWebSearchResults } f
 import { extractSocialHandles } from '@/lib/utils';
 import type { PlatformStatus } from '@prisma/client';
 
-// Concurrency settings
-const CONCURRENT_CREATORS = 10; // Process 10 creators at a time for better throughput
+// Concurrency settings - increased for higher throughput with upgraded API limits
+const CONCURRENT_CREATORS = 25; // Process 25 creators at a time for better throughput
 
 // Helper to chunk an array
 function chunk<T>(array: T[], size: number): T[][] {
@@ -363,6 +363,12 @@ export async function GET(
       };
 
       try {
+        // Start timing for throughput metrics
+        const batchStartTime = Date.now();
+        let completedCreators = 0;
+        let failedCreators = 0;
+        let totalPosts = 0;
+
         const batch = await db.batch.findUnique({
           where: { id: batchId },
           include: { creators: true },
@@ -386,15 +392,70 @@ export async function GET(
 
         for (const creatorBatch of creatorChunks) {
           // Process this chunk in parallel
-          await Promise.allSettled(
+          const results = await Promise.allSettled(
             creatorBatch.map(creator => processCreator(creator, searchTerms))
           );
 
-          // Small delay between batches to avoid overwhelming APIs
+          // Track results for metrics
+          for (const result of results) {
+            if (result.status === 'fulfilled' && result.value) {
+              if (result.value.success) {
+                completedCreators++;
+              } else if (result.value.failed) {
+                failedCreators++;
+              }
+            }
+          }
+
+          // Small delay between batches to avoid overwhelming APIs (reduced from 300ms)
           if (creatorChunks.indexOf(creatorBatch) < creatorChunks.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           }
         }
+
+        // Calculate throughput metrics
+        const batchEndTime = Date.now();
+        const durationMs = batchEndTime - batchStartTime;
+        const durationMinutes = durationMs / 60000;
+
+        // Get post count from completed creators
+        const completedCreatorRecords = await db.creator.findMany({
+          where: {
+            batchId: batchId,
+            status: 'COMPLETED',
+          },
+          include: {
+            report: true,
+          },
+        });
+
+        for (const creator of completedCreatorRecords) {
+          if (creator.report) {
+            try {
+              const rawResults = JSON.parse(creator.report.rawResults || '{}');
+              const socialMedia = rawResults.socialMedia || [];
+              for (const platform of socialMedia) {
+                totalPosts += platform.posts?.length || 0;
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+
+        const metrics = {
+          durationMs,
+          durationMinutes: Math.round(durationMinutes * 100) / 100,
+          totalCreators: pendingCreators.length,
+          completedCreators,
+          failedCreators,
+          totalPosts,
+          creatorsPerMinute: durationMinutes > 0 ? Math.round((completedCreators / durationMinutes) * 100) / 100 : 0,
+          postsPerMinute: durationMinutes > 0 ? Math.round((totalPosts / durationMinutes) * 100) / 100 : 0,
+          concurrencyUsed: CONCURRENT_CREATORS,
+        };
+
+        console.log('[BatchMetrics]', JSON.stringify(metrics, null, 2));
 
         // Mark batch as completed
         await db.batch.update({
@@ -405,7 +466,11 @@ export async function GET(
           },
         });
 
-        sendEvent('batch_completed', { batchId, status: 'COMPLETED' });
+        sendEvent('batch_completed', {
+          batchId,
+          status: 'COMPLETED',
+          metrics,
+        });
       } catch (error) {
         console.error('Stream error:', error);
         sendEvent('error', {

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import PQueue from 'p-queue';
 import type {
   BrandMention,
   BrandDetectionResult,
@@ -7,6 +8,10 @@ import type {
   PartnershipType,
   SocialMediaPost,
 } from '@/types/social-media';
+
+// Brand detection concurrency settings
+const BRAND_DETECTION_CONCURRENCY = 20;
+const BRAND_DETECTION_INTERVAL_MS = 100;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -244,8 +249,8 @@ export async function detectBrandsBatch(
     const result = await detectBrands(post.content, platform);
     results.set(post.id, result);
 
-    // Small delay between API calls
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Small delay between API calls (reduced from 100ms)
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   return results;
@@ -371,6 +376,7 @@ function convertToPartnerships(
 /**
  * Extract brand partnerships from all posts
  * This is the main function for comprehensive brand history
+ * Uses p-queue for parallel processing with rate limiting
  */
 export async function extractBrandPartnerships(
   posts: SocialMediaPost[],
@@ -378,23 +384,43 @@ export async function extractBrandPartnerships(
 ): Promise<BrandPartnership[]> {
   const partnerships: BrandPartnership[] = [];
 
-  // Process posts in batches to manage API rate limits
-  for (const post of posts) {
+  // Filter posts with content upfront
+  const postsWithContent = posts.filter(post => {
     const content = post.caption + (post.transcript ? '\n' + post.transcript : '');
+    return content && content.trim().length > 0;
+  });
 
-    if (!content || content.trim().length === 0) {
-      continue;
-    }
+  if (postsWithContent.length === 0) {
+    return partnerships;
+  }
 
-    const brandResult = await detectBrands(content, platform);
+  // Create queue for parallel processing with rate limiting
+  const queue = new PQueue({
+    concurrency: BRAND_DETECTION_CONCURRENCY,
+    interval: BRAND_DETECTION_INTERVAL_MS,
+    intervalCap: BRAND_DETECTION_CONCURRENCY,
+  });
 
-    if (brandResult.brands.length > 0) {
-      const postPartnerships = convertToPartnerships(post, brandResult, platform);
+  // Process all posts in parallel
+  const results = await Promise.all(
+    postsWithContent.map(post =>
+      queue.add(async () => {
+        const content = post.caption + (post.transcript ? '\n' + post.transcript : '');
+        const brandResult = await detectBrands(content, platform);
+
+        if (brandResult.brands.length > 0) {
+          return convertToPartnerships(post, brandResult, platform);
+        }
+        return [];
+      })
+    )
+  );
+
+  // Flatten results
+  for (const postPartnerships of results) {
+    if (postPartnerships) {
       partnerships.push(...postPartnerships);
     }
-
-    // Small delay between posts
-    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   // Sort by date (newest first)

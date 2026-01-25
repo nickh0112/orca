@@ -22,14 +22,14 @@ import {
 import { analyzeVideoWithOptions, isTwelveLabsConfigured } from './twelve-labs';
 import { analyzeImage, isClaudeVisionConfigured } from './image-analysis';
 
-// Default configuration - optimized for production throughput
+// Default configuration - optimized for production throughput with upgraded API limits
 const DEFAULTS = {
-  VIDEO_CONCURRENCY: 10,   // Increased from 5 for faster batch processing
-  IMAGE_CONCURRENCY: 20,   // Increased from 10 for faster batch processing
+  VIDEO_CONCURRENCY: 25,   // Increased from 10 for faster batch processing
+  IMAGE_CONCURRENCY: 50,   // Increased from 20 for faster batch processing
   RETRIES: 3,
   RETRY_DELAY_MS: 1000,
-  VIDEO_INTERVAL_MS: 500,  // Reduced from 1000ms - 2 videos per second max
-  IMAGE_INTERVAL_MS: 50,   // Reduced from 100ms - 20 images per second max
+  VIDEO_INTERVAL_MS: 200,  // Reduced from 500ms - 5 videos per second max
+  IMAGE_INTERVAL_MS: 20,   // Reduced from 50ms - 50 images per second max
 };
 
 interface QueueStats {

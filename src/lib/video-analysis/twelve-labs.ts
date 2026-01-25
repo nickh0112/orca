@@ -40,13 +40,13 @@ const TWELVE_LABS_API_BASE = 'https://api.twelvelabs.io/v1.3';
 // Index configuration
 const INDEX_NAME = 'orca-brand-safety';
 
-// Configuration - optimized for faster polling with adaptive backoff
+// Configuration - optimized for faster polling with upgraded API limits
 const CONFIG = {
   INDEXING_TIMEOUT_MS: 600000, // 10 minutes (for longer videos)
-  INITIAL_POLL_INTERVAL_MS: 2000, // Start with 2 seconds (was 5s)
-  MIN_POLL_INTERVAL_MS: 1000, // Minimum 1 second
-  MAX_POLL_INTERVAL_MS: 10000, // Maximum 10 seconds
-  BACKOFF_MULTIPLIER: 1.5, // Exponential backoff factor
+  INITIAL_POLL_INTERVAL_MS: 1000, // Start with 1 second (was 2s)
+  MIN_POLL_INTERVAL_MS: 500, // Minimum 500ms (was 1s)
+  MAX_POLL_INTERVAL_MS: 5000, // Maximum 5 seconds (was 10s)
+  BACKOFF_MULTIPLIER: 1.3, // Exponential backoff factor (was 1.5)
   MAX_VIDEO_DURATION_SEC: 600, // 10 minutes max
 };
 
@@ -1562,7 +1562,7 @@ export async function analyzeVideoWithOptions(
  */
 export async function analyzeVideos(
   videos: Array<{ id: string; url: string; buffer?: Buffer }>,
-  concurrency: number = 2
+  concurrency: number = 10
 ): Promise<Map<string, VideoAnalysisResult | null>> {
   const results = new Map<string, VideoAnalysisResult | null>();
 

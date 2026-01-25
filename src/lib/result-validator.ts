@@ -10,7 +10,7 @@ const anthropic = new Anthropic({
 // Retry configuration
 const ANTHROPIC_CONFIG = {
   MAX_RETRIES: 3,
-  BASE_DELAY: 50, // Reduced from 100ms
+  BASE_DELAY: 20, // Reduced from 50ms for higher throughput
   RETRY_DELAY: 1000, // Base delay for exponential backoff
 };
 

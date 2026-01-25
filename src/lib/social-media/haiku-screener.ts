@@ -9,11 +9,12 @@ const anthropic = new Anthropic({
 // Haiku model for fast, cheap screening
 const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 
-// Configuration
+// Configuration - optimized for higher throughput
 const CONFIG = {
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000,
   MAX_POSTS_PER_BATCH: 50,
+  CONCURRENT_HAIKU_BATCHES: 3, // Process 3 batches in parallel
 };
 
 // Types for screening results
@@ -101,6 +102,7 @@ ${formatVisualAnalysisForPrompt(post.visualAnalysis)}`;
 /**
  * Screen a batch of posts with Haiku to extract potential issues
  * This is the "Junior Analyst" role - identify what MIGHT be concerning
+ * Processes multiple batches in parallel for higher throughput
  */
 export async function screenPostsWithHaiku(
   posts: SocialMediaPost[],
@@ -111,13 +113,25 @@ export async function screenPostsWithHaiku(
     return [];
   }
 
+  // Split into batches
+  const batches: SocialMediaPost[][] = [];
+  for (let i = 0; i < posts.length; i += CONFIG.MAX_POSTS_PER_BATCH) {
+    batches.push(posts.slice(i, i + CONFIG.MAX_POSTS_PER_BATCH));
+  }
+
   const allResults: ScreeningResult[] = [];
 
-  // Process in batches
-  for (let i = 0; i < posts.length; i += CONFIG.MAX_POSTS_PER_BATCH) {
-    const batch = posts.slice(i, i + CONFIG.MAX_POSTS_PER_BATCH);
-    const batchResults = await screenBatch(batch, platform, handle);
-    allResults.push(...batchResults);
+  // Process batches in parallel groups for higher throughput
+  for (let i = 0; i < batches.length; i += CONFIG.CONCURRENT_HAIKU_BATCHES) {
+    const parallelBatches = batches.slice(i, i + CONFIG.CONCURRENT_HAIKU_BATCHES);
+
+    const batchResultGroups = await Promise.all(
+      parallelBatches.map(batch => screenBatch(batch, platform, handle))
+    );
+
+    for (const batchResults of batchResultGroups) {
+      allResults.push(...batchResults);
+    }
   }
 
   return allResults;

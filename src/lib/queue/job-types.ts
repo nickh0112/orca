@@ -670,23 +670,23 @@ export const DEFAULT_JOB_OPTIONS = {
 };
 
 /**
- * Queue concurrency settings
+ * Queue concurrency settings - increased for higher throughput with upgraded API limits
  */
 export const QUEUE_CONCURRENCY = {
-  [QUEUE_NAMES.VIDEO_ANALYSIS]: 10,
-  [QUEUE_NAMES.IMAGE_ANALYSIS]: 20,
-  [QUEUE_NAMES.SCRAPER]: 5,
-  [QUEUE_NAMES.BATCH_COORDINATOR]: 3,
-  [QUEUE_NAMES.AD_FORMAT_ANALYSIS]: 10, // Claude Tier 2: 1000 RPM available
+  [QUEUE_NAMES.VIDEO_ANALYSIS]: 25,
+  [QUEUE_NAMES.IMAGE_ANALYSIS]: 50,
+  [QUEUE_NAMES.SCRAPER]: 15,
+  [QUEUE_NAMES.BATCH_COORDINATOR]: 5,
+  [QUEUE_NAMES.AD_FORMAT_ANALYSIS]: 25, // Claude Tier 2: 1000 RPM available
 };
 
 /**
- * Rate limiting settings (jobs per second)
+ * Rate limiting settings (jobs per second) - increased for higher throughput
  */
 export const QUEUE_RATE_LIMITS = {
-  [QUEUE_NAMES.VIDEO_ANALYSIS]: { max: 10, duration: 1000 },
-  [QUEUE_NAMES.IMAGE_ANALYSIS]: { max: 20, duration: 1000 },
-  [QUEUE_NAMES.SCRAPER]: { max: 5, duration: 1000 },
-  [QUEUE_NAMES.BATCH_COORDINATOR]: { max: 3, duration: 1000 },
-  [QUEUE_NAMES.AD_FORMAT_ANALYSIS]: { max: 100, duration: 60000 }, // 100 per minute
+  [QUEUE_NAMES.VIDEO_ANALYSIS]: { max: 25, duration: 1000 },
+  [QUEUE_NAMES.IMAGE_ANALYSIS]: { max: 50, duration: 1000 },
+  [QUEUE_NAMES.SCRAPER]: { max: 15, duration: 1000 },
+  [QUEUE_NAMES.BATCH_COORDINATOR]: { max: 5, duration: 1000 },
+  [QUEUE_NAMES.AD_FORMAT_ANALYSIS]: { max: 250, duration: 60000 }, // 250 per minute
 };
