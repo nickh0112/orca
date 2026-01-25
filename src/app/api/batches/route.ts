@@ -7,12 +7,52 @@ export async function GET() {
   try {
     const batches = await db.batch.findMany({
       orderBy: { createdAt: 'desc' },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        userEmail: true,
+        clientName: true,
+        createdAt: true,
+        updatedAt: true,
+        completedAt: true,
         _count: { select: { creators: true } },
+        creators: {
+          select: {
+            status: true,
+            report: {
+              select: {
+                riskLevel: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return NextResponse.json({ batches });
+    // Transform batches to include completedCount and riskBreakdown
+    const batchesWithProgress = batches.map((batch) => {
+      const completedCount = batch.creators.filter(
+        (c) => c.status === 'COMPLETED'
+      ).length;
+
+      const riskBreakdown = {
+        critical: batch.creators.filter((c) => c.report?.riskLevel === 'CRITICAL').length,
+        high: batch.creators.filter((c) => c.report?.riskLevel === 'HIGH').length,
+        medium: batch.creators.filter((c) => c.report?.riskLevel === 'MEDIUM').length,
+        low: batch.creators.filter((c) => c.report?.riskLevel === 'LOW').length,
+      };
+
+      // Remove the raw creators array, keep only aggregated data
+      const { creators, ...batchData } = batch;
+      return {
+        ...batchData,
+        completedCount,
+        riskBreakdown,
+      };
+    });
+
+    return NextResponse.json({ batches: batchesWithProgress });
   } catch (error) {
     console.error('Failed to fetch batches:', error);
     return NextResponse.json(
