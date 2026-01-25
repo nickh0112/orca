@@ -7,7 +7,6 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
 import { Spinner } from '@/components/ui/spinner';
 import { BatchesTable } from '@/components/dashboard/batches-table';
-import { ActivityFeed } from '@/components/dashboard/activity-feed';
 import { cn } from '@/lib/utils';
 import type { BatchStatus } from '@/types';
 
@@ -79,19 +78,6 @@ export default function BatchesPage() {
 
   const displayActiveBatches = [...activeBatches, ...recentlyCompletedForActive].slice(0, 6);
 
-  // Recent activity: completed batches
-  const activityItems = filteredBatches
-    .filter((b) => b.status === 'COMPLETED')
-    .map((batch) => ({
-      id: batch.id,
-      type: 'batch_completed' as const,
-      batchId: batch.id,
-      batchName: batch.name,
-      userEmail: batch.userEmail || undefined,
-      timestamp: batch.completedAt || batch.createdAt,
-    }))
-    .slice(0, 10);
-
   return (
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-5xl mx-auto px-8 py-16">
@@ -151,11 +137,6 @@ export default function BatchesPage() {
             </Link>
           </div>
         )}
-
-        {/* Recent Activity Section */}
-        <section className="mt-12">
-          <ActivityFeed items={activityItems} />
-        </section>
       </div>
     </div>
   );
