@@ -27,8 +27,13 @@ interface VideoPlayerProps {
   onPlayStateChange?: (isPlaying: boolean) => void;
   onSeeked?: () => void;
   externalCurrentTime?: number;
-  externalSeekTo?: number;
+  /** Seek request with unique ID to ensure seeking works even for same timestamp */
+  seekRequest?: { time: number; id: number } | null;
   fallbackUrl?: string;
+  /** When true, hide the built-in control bar (use VideoTimeline as the controller) */
+  hideControls?: boolean;
+  /** External control for play state - when changed, will play/pause the video */
+  externalIsPlaying?: boolean;
 }
 
 interface ActiveOverlay {
@@ -55,8 +60,10 @@ export function VideoPlayer({
   onPlayStateChange,
   onSeeked,
   externalCurrentTime,
-  externalSeekTo,
-  fallbackUrl
+  seekRequest,
+  fallbackUrl,
+  hideControls = false,
+  externalIsPlaying
 }: VideoPlayerProps) {
   const t = useTranslations('creatorReport.videoPlayer');
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -116,12 +123,22 @@ export function VideoPlayer({
     setActiveOverlays(overlays);
   }, [currentTime, analysis]);
 
-  // Handle external seek requests
+  // Handle external seek requests - depends on ID to always trigger even for same time
   useEffect(() => {
-    if (externalSeekTo !== undefined && videoRef.current) {
-      videoRef.current.currentTime = externalSeekTo;
+    if (seekRequest && videoRef.current) {
+      videoRef.current.currentTime = seekRequest.time;
     }
-  }, [externalSeekTo]);
+  }, [seekRequest?.id]);
+
+  // Handle external play/pause control
+  useEffect(() => {
+    if (externalIsPlaying === undefined || !videoRef.current) return;
+    if (externalIsPlaying && !isPlaying) {
+      videoRef.current.play();
+    } else if (!externalIsPlaying && isPlaying) {
+      videoRef.current.pause();
+    }
+  }, [externalIsPlaying, isPlaying]);
 
   // Video event handlers
   const handleTimeUpdate = useCallback(() => {
@@ -338,96 +355,98 @@ export function VideoPlayer({
         </div>
       )}
 
-      {/* Controls Overlay */}
-      <div
-        className={cn(
-          'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent',
-          'transition-opacity duration-300',
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
-        )}
-      >
-        {/* Progress Bar */}
+      {/* Controls Overlay - hidden when hideControls is true */}
+      {!hideControls && (
         <div
-          className="px-4 py-2 cursor-pointer group/progress"
-          onClick={handleSeek}
+          className={cn(
+            'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent',
+            'transition-opacity duration-300',
+            showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
+          )}
         >
-          <div className="h-1 bg-zinc-700 rounded-full relative overflow-hidden group-hover/progress:h-2 transition-all">
-            {/* Buffered */}
-            <div
-              className="absolute inset-y-0 left-0 bg-zinc-600 rounded-full"
-              style={{ width: `${(buffered / duration) * 100}%` }}
-            />
-            {/* Progress */}
-            <div
-              className="absolute inset-y-0 left-0 bg-white rounded-full"
-              style={{ width: `${(currentTime / duration) * 100}%` }}
-            />
-            {/* Scrubber */}
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/progress:opacity-100 transition-opacity"
-              style={{ left: `calc(${(currentTime / duration) * 100}% - 6px)` }}
-            />
-          </div>
-        </div>
-
-        {/* Control Buttons */}
-        <div className="px-4 pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Play/Pause */}
-            <button
-              onClick={togglePlay}
-              className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
-              title={isPlaying ? t('pause') : t('play')}
-            >
-              {isPlaying ? (
-                <Pause className="w-5 h-5 text-white" />
-              ) : (
-                <Play className="w-5 h-5 text-white" />
-              )}
-            </button>
-
-            {/* Volume */}
-            <button
-              onClick={toggleMute}
-              className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
-              title={isMuted ? t('unmute') : t('mute')}
-            >
-              {isMuted ? (
-                <VolumeX className="w-5 h-5 text-white" />
-              ) : (
-                <Volume2 className="w-5 h-5 text-white" />
-              )}
-            </button>
-
-            {/* Time */}
-            <span className="text-xs text-white/80 font-mono">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
+          {/* Progress Bar */}
+          <div
+            className="px-4 py-2 cursor-pointer group/progress"
+            onClick={handleSeek}
+          >
+            <div className="h-1 bg-zinc-700 rounded-full relative overflow-hidden group-hover/progress:h-2 transition-all">
+              {/* Buffered */}
+              <div
+                className="absolute inset-y-0 left-0 bg-zinc-600 rounded-full"
+                style={{ width: `${(buffered / duration) * 100}%` }}
+              />
+              {/* Progress */}
+              <div
+                className="absolute inset-y-0 left-0 bg-white rounded-full"
+                style={{ width: `${(currentTime / duration) * 100}%` }}
+              />
+              {/* Scrubber */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/progress:opacity-100 transition-opacity"
+                style={{ left: `calc(${(currentTime / duration) * 100}% - 6px)` }}
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Active detection count */}
-            {activeOverlays.length > 0 && (
-              <span className="px-2 py-0.5 bg-purple-500/50 rounded text-xs text-white">
-                {activeOverlays.length} active
+          {/* Control Buttons */}
+          <div className="px-4 pb-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {/* Play/Pause */}
+              <button
+                onClick={togglePlay}
+                className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
+                title={isPlaying ? t('pause') : t('play')}
+              >
+                {isPlaying ? (
+                  <Pause className="w-5 h-5 text-white" />
+                ) : (
+                  <Play className="w-5 h-5 text-white" />
+                )}
+              </button>
+
+              {/* Volume */}
+              <button
+                onClick={toggleMute}
+                className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
+                title={isMuted ? t('unmute') : t('mute')}
+              >
+                {isMuted ? (
+                  <VolumeX className="w-5 h-5 text-white" />
+                ) : (
+                  <Volume2 className="w-5 h-5 text-white" />
+                )}
+              </button>
+
+              {/* Time */}
+              <span className="text-xs text-white/80 font-mono">
+                {formatTime(currentTime)} / {formatTime(duration)}
               </span>
-            )}
+            </div>
 
-            {/* Fullscreen */}
-            <button
-              onClick={toggleFullscreen}
-              className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
-              title={isFullscreen ? t('exitFullscreen') : t('fullscreen')}
-            >
-              {isFullscreen ? (
-                <Minimize className="w-5 h-5 text-white" />
-              ) : (
-                <Maximize className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-2">
+              {/* Active detection count */}
+              {activeOverlays.length > 0 && (
+                <span className="px-2 py-0.5 bg-purple-500/50 rounded text-xs text-white">
+                  {activeOverlays.length} active
+                </span>
               )}
-            </button>
+
+              {/* Fullscreen */}
+              <button
+                onClick={toggleFullscreen}
+                className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
+                title={isFullscreen ? t('exitFullscreen') : t('fullscreen')}
+              >
+                {isFullscreen ? (
+                  <Minimize className="w-5 h-5 text-white" />
+                ) : (
+                  <Maximize className="w-5 h-5 text-white" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Click to play overlay (when paused) */}
       {!isPlaying && !isLoading && !error && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, use } from 'react';
+import { useEffect, useState, useMemo, useCallback, use, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle, Play, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
@@ -99,17 +99,15 @@ export default function CreatorReportPage({
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [seekToTime, setSeekToTime] = useState<number | undefined>();
+
+  // Seek request with unique ID to ensure seeking always works (even for same timestamp)
+  const [seekRequest, setSeekRequest] = useState<{ time: number; id: number } | null>(null);
+  const seekIdRef = useRef(0);
 
   // Handle seeking from timeline, transcript, or brand clicks
   const handleSeekToTime = useCallback((time: number) => {
-    setSeekToTime(time);
-    // Don't clear here - let onSeeked callback do it
-  }, []);
-
-  // Handle video seek completion
-  const handleVideoSeeked = useCallback(() => {
-    setSeekToTime(undefined);
+    seekIdRef.current += 1;
+    setSeekRequest({ time, id: seekIdRef.current });
   }, []);
 
   // Handle flag click from FlagDigest
@@ -557,8 +555,9 @@ export default function CreatorReportPage({
                     onTimeUpdate={setCurrentVideoTime}
                     onDurationChange={setVideoDuration}
                     onPlayStateChange={setIsVideoPlaying}
-                    onSeeked={handleVideoSeeked}
-                    externalSeekTo={seekToTime}
+                    seekRequest={seekRequest}
+                    hideControls={true}
+                    externalIsPlaying={isVideoPlaying}
                     className="rounded-lg overflow-hidden"
                   />
                 ) : selectedFinding.socialMediaSource?.thumbnailUrl ? (
