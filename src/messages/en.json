@@ -149,6 +149,68 @@
       },
       "summaryTitle": "Visual Insights ({count} videos analyzed)",
       "brandsAcrossVideos": "Brands detected across videos:"
+    },
+    "safetyBreakdown": {
+      "title": "Safety Score Breakdown",
+      "overallDescription": "Overall brand safety assessment based on content analysis",
+      "lowRisk": "Low Risk",
+      "moderate": "Moderate",
+      "highRisk": "High Risk",
+      "categoryBreakdown": "Category Breakdown",
+      "detectedContent": "Detected Content Types",
+      "categories": {
+        "brandSafety": "Brand Safety",
+        "violence": "Violence",
+        "adultContent": "Adult Content",
+        "political": "Political Content",
+        "substanceUse": "Substance Use"
+      },
+      "descriptions": {
+        "brandSafety": "Overall brand appropriateness and alignment",
+        "violence": "Violent imagery or aggressive content",
+        "adultContent": "Mature or explicit content",
+        "political": "Political messaging or controversial topics",
+        "substanceUse": "Alcohol, tobacco, or drug references"
+      }
+    },
+    "brandExposure": {
+      "title": "Brand Exposure Analytics",
+      "screenTime": "Screen Time",
+      "prominence": "Prominence",
+      "likelySponsors": "Likely Sponsors",
+      "incidentalBrands": "Incidental Appearances",
+      "totalExposure": "Total Brand Exposure",
+      "seconds": "sec",
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "background": "Background",
+      "sponsorBadge": "Sponsor",
+      "noData": "No brand exposure data available",
+      "appearanceCount": "{count, plural, one {# appearance} other {# appearances}}"
+    },
+    "transcript": {
+      "title": "Transcript",
+      "search": "Search transcript...",
+      "noResults": "No matches found",
+      "clickToSeek": "Click to jump to timestamp",
+      "noTranscript": "No transcript available",
+      "brandMention": "Brand mentioned"
+    },
+    "videoPlayer": {
+      "play": "Play",
+      "pause": "Pause",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit Fullscreen",
+      "videoUnavailable": "Video unavailable",
+      "loadError": "Failed to load video"
+    },
+    "competitorAlert": {
+      "title": "Competitor Brand Alert",
+      "description": "This creator features competitor brands prominently",
+      "detected": "Competitor brands detected",
+      "exposure": "Competitor Exposure"
     }
   },
   "bulkImport": {
