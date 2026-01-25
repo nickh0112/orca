@@ -6,7 +6,7 @@ import { User, UsersRound, ArrowRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
 import { Spinner } from '@/components/ui/spinner';
-import { CampaignCard } from '@/components/dashboard/campaign-card';
+import { BatchesTable } from '@/components/dashboard/batches-table';
 import { ActivityFeed } from '@/components/dashboard/activity-feed';
 import { cn } from '@/lib/utils';
 import type { BatchStatus } from '@/types';
@@ -137,22 +137,7 @@ export default function BatchesPage() {
 
         {/* Active Campaigns Section */}
         {displayActiveBatches.length > 0 ? (
-          <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-hide">
-            {displayActiveBatches.map((batch) => (
-              <div key={batch.id} className="flex-shrink-0 w-[280px]">
-                <CampaignCard
-                  id={batch.id}
-                  name={batch.name}
-                  clientName={batch.clientName}
-                  status={batch.status}
-                  creatorCount={batch._count.creators}
-                  completedCount={batch.completedCount}
-                  riskBreakdown={batch.riskBreakdown}
-                  createdAt={batch.createdAt}
-                />
-              </div>
-            ))}
-          </div>
+          <BatchesTable batches={displayActiveBatches} />
         ) : (
           <div className="py-12 text-center border border-zinc-800 rounded-xl bg-zinc-900/30">
             <p className="text-zinc-600 text-sm mb-4">

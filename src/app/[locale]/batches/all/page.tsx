@@ -6,7 +6,7 @@ import { User, UsersRound, ArrowLeft } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
 import { Spinner } from '@/components/ui/spinner';
-import { CampaignCard } from '@/components/dashboard/campaign-card';
+import { BatchesTable } from '@/components/dashboard/batches-table';
 import { cn } from '@/lib/utils';
 import type { BatchStatus } from '@/types';
 
@@ -115,21 +115,7 @@ export default function AllBatchesPage() {
 
         {/* Batch List */}
         {filteredBatches.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredBatches.map((batch) => (
-              <CampaignCard
-                key={batch.id}
-                id={batch.id}
-                name={batch.name}
-                clientName={batch.clientName}
-                status={batch.status}
-                creatorCount={batch._count.creators}
-                completedCount={batch.completedCount}
-                riskBreakdown={batch.riskBreakdown}
-                createdAt={batch.createdAt}
-              />
-            ))}
-          </div>
+          <BatchesTable batches={filteredBatches} />
         ) : (
           <div className="py-16 text-center">
             <p className="text-zinc-600 text-sm mb-4">
