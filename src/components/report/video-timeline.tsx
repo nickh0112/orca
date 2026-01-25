@@ -1,124 +1,310 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Play, Tag, AlertTriangle, Eye } from 'lucide-react';
+import { useMemo, useState, useRef, useCallback } from 'react';
+import { Play, Pause, Tag, AlertTriangle, Eye, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { VisualAnalysisData } from '@/types';
+import type { VisualAnalysisData, LogoDetection, TranscriptSegment } from '@/types';
 
 interface TimelineMarker {
-  position: number; // 0-100 percent
+  id: string;
+  startTime: number;
+  endTime: number;
   type: 'brand' | 'concern' | 'text';
   label: string;
   color: string;
+  prominence?: 'primary' | 'secondary' | 'background';
+  confidence?: number;
 }
 
 interface VideoTimelineProps {
   analysis: VisualAnalysisData;
-  duration?: number; // in seconds
+  duration?: number;
+  currentTime?: number;
+  isPlaying?: boolean;
   className?: string;
+  onSeek?: (time: number) => void;
+  onTogglePlay?: () => void;
 }
 
-export function VideoTimeline({ analysis, duration = 60, className }: VideoTimelineProps) {
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+export function VideoTimeline({
+  analysis,
+  duration: propDuration,
+  currentTime = 0,
+  isPlaying = false,
+  className,
+  onSeek,
+  onTogglePlay
+}: VideoTimelineProps) {
+  const [zoom, setZoom] = useState(1);
+  const [hoveredMarker, setHoveredMarker] = useState<TimelineMarker | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Use video duration from analysis if available
+  const duration = propDuration || analysis.videoDuration || 60;
+
   // Generate timeline markers from analysis data
+  // Prioritize actual timestamps from logoDetections if available
   const markers = useMemo(() => {
     const result: TimelineMarker[] = [];
 
     // Add brand detection markers
-    analysis.brands.forEach((brand, index) => {
-      result.push({
-        position: 10 + (index * 20) % 80, // Distribute across timeline
-        type: 'brand',
-        label: brand.brand,
-        color: 'bg-purple-500',
+    if (analysis.logoDetections && analysis.logoDetections.length > 0) {
+      // Use actual timestamps from logo detections
+      analysis.logoDetections.forEach((logo) => {
+        logo.appearances.forEach((appearance, appIndex) => {
+          result.push({
+            id: `brand-${logo.brand}-${appIndex}`,
+            startTime: appearance.startTime,
+            endTime: appearance.endTime,
+            type: 'brand',
+            label: logo.brand,
+            color: logo.likelySponsor ? 'bg-purple-500' : 'bg-purple-400',
+            prominence: appearance.prominence,
+            confidence: appearance.confidence,
+          });
+        });
       });
-    });
+    } else {
+      // Fallback to estimated positions for legacy data
+      analysis.brands.forEach((brand, index) => {
+        const position = 10 + (index * 20) % 80;
+        const startTime = (position / 100) * duration;
+        result.push({
+          id: `brand-${brand.brand}-${index}`,
+          startTime,
+          endTime: startTime + 2,
+          type: 'brand',
+          label: brand.brand,
+          color: 'bg-purple-500',
+        });
+      });
+    }
 
     // Add text detection markers
-    analysis.textInVideo.forEach((text, index) => {
-      result.push({
-        position: 15 + (index * 25) % 70,
-        type: 'text',
-        label: text.text.slice(0, 20) + (text.text.length > 20 ? '...' : ''),
-        color: 'bg-cyan-500',
+    if (analysis.textInVideo) {
+      analysis.textInVideo.forEach((text, index) => {
+        const startTime = text.startTime ?? ((15 + (index * 25) % 70) / 100) * duration;
+        const endTime = text.endTime ?? startTime + 3;
+        result.push({
+          id: `text-${index}`,
+          startTime,
+          endTime,
+          type: 'text',
+          label: text.text.slice(0, 30) + (text.text.length > 30 ? '...' : ''),
+          color: 'bg-cyan-500',
+        });
       });
-    });
+    }
 
     // Add concern markers
-    analysis.sceneContext.concerns.forEach((concern, index) => {
-      result.push({
-        position: 30 + (index * 30) % 60,
-        type: 'concern',
-        label: concern,
-        color: 'bg-amber-500',
+    if (analysis.sceneContext?.concerns) {
+      analysis.sceneContext.concerns.forEach((concern, index) => {
+        const startTime = ((30 + (index * 30) % 60) / 100) * duration;
+        result.push({
+          id: `concern-${index}`,
+          startTime,
+          endTime: startTime + 5,
+          type: 'concern',
+          label: concern,
+          color: 'bg-amber-500',
+        });
       });
-    });
+    }
 
-    return result;
-  }, [analysis]);
+    return result.sort((a, b) => a.startTime - b.startTime);
+  }, [analysis, duration]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Handle timeline click for seeking
+  const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onSeek || !timelineRef.current) return;
+
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    const time = percentage * duration;
+    onSeek(Math.max(0, Math.min(duration, time)));
+  }, [duration, onSeek]);
+
+  // Handle marker click
+  const handleMarkerClick = useCallback((marker: TimelineMarker, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSeek?.(marker.startTime);
+  }, [onSeek]);
+
+  // Calculate position percentage
+  const getPositionPercent = (time: number) => (time / duration) * 100;
+
+  // Calculate visible range based on zoom
+  const visibleDuration = duration / zoom;
+  const scrollOffset = Math.max(0, currentTime - visibleDuration / 2);
 
   return (
     <div className={cn('space-y-3', className)}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Play size={14} className="text-zinc-500" />
+          {onTogglePlay && (
+            <button
+              onClick={onTogglePlay}
+              className="p-1 hover:bg-zinc-800 rounded transition-colors"
+            >
+              {isPlaying ? (
+                <Pause size={14} className="text-zinc-400" />
+              ) : (
+                <Play size={14} className="text-zinc-400" />
+              )}
+            </button>
+          )}
           <span className="text-xs text-zinc-500 uppercase tracking-wider">Video Timeline</span>
         </div>
-        <span className="text-xs text-zinc-600">{formatTime(duration)}</span>
+        <div className="flex items-center gap-2">
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setZoom(Math.min(zoom * 1.5, 4))}
+              className="p-1 hover:bg-zinc-800 rounded transition-colors"
+              title="Zoom in"
+            >
+              <ZoomIn size={12} className="text-zinc-500" />
+            </button>
+            <button
+              onClick={() => setZoom(Math.max(zoom / 1.5, 1))}
+              className="p-1 hover:bg-zinc-800 rounded transition-colors"
+              title="Zoom out"
+            >
+              <ZoomOut size={12} className="text-zinc-500" />
+            </button>
+            {zoom > 1 && (
+              <button
+                onClick={() => setZoom(1)}
+                className="p-1 hover:bg-zinc-800 rounded transition-colors"
+                title="Reset zoom"
+              >
+                <RotateCcw size={12} className="text-zinc-500" />
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-zinc-600">{formatTime(duration)}</span>
+        </div>
       </div>
 
       {/* Timeline bar */}
       <div className="relative">
-        {/* Background track */}
-        <div className="h-8 bg-zinc-800/50 rounded-lg relative overflow-hidden">
-          {/* Time markers */}
-          <div className="absolute inset-0 flex items-end pb-1">
+        <div
+          ref={timelineRef}
+          className={cn(
+            'h-12 bg-zinc-800/50 rounded-lg relative overflow-hidden',
+            onSeek && 'cursor-pointer'
+          )}
+          onClick={handleTimelineClick}
+        >
+          {/* Time grid markers */}
+          <div className="absolute inset-0">
             {[0, 25, 50, 75, 100].map((pct) => (
               <div
                 key={pct}
-                className="absolute bottom-0 w-px h-2 bg-zinc-700"
+                className="absolute top-0 bottom-0 w-px bg-zinc-700/50"
                 style={{ left: `${pct}%` }}
               />
             ))}
           </div>
 
-          {/* Detection markers */}
-          {markers.map((marker, index) => (
-            <div
-              key={index}
-              className="absolute top-1/2 -translate-y-1/2 group"
-              style={{ left: `${marker.position}%` }}
-            >
-              {/* Marker dot */}
+          {/* Brand appearance ranges (background spans) */}
+          {markers
+            .filter(m => m.type === 'brand' && m.endTime > m.startTime)
+            .map((marker) => (
               <div
+                key={`range-${marker.id}`}
                 className={cn(
-                  'w-2 h-2 rounded-full cursor-pointer transition-transform hover:scale-150',
-                  marker.color
+                  'absolute top-0 bottom-0 opacity-20',
+                  marker.prominence === 'primary' ? 'bg-emerald-500' :
+                  marker.prominence === 'secondary' ? 'bg-amber-500' :
+                  'bg-purple-500'
                 )}
+                style={{
+                  left: `${getPositionPercent(marker.startTime)}%`,
+                  width: `${getPositionPercent(marker.endTime - marker.startTime)}%`,
+                }}
               />
+            ))}
 
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-300 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                <div className="flex items-center gap-1.5">
-                  {marker.type === 'brand' && <Tag size={10} className="text-purple-400" />}
-                  {marker.type === 'concern' && <AlertTriangle size={10} className="text-amber-400" />}
-                  {marker.type === 'text' && <Eye size={10} className="text-cyan-400" />}
-                  {marker.label}
+          {/* Detection markers */}
+          {markers.map((marker) => {
+            const leftPercent = getPositionPercent(marker.startTime);
+            const isHovered = hoveredMarker?.id === marker.id;
+
+            return (
+              <div
+                key={marker.id}
+                className="absolute top-1/2 -translate-y-1/2 group z-10"
+                style={{ left: `${leftPercent}%` }}
+                onMouseEnter={() => setHoveredMarker(marker)}
+                onMouseLeave={() => setHoveredMarker(null)}
+                onClick={(e) => handleMarkerClick(marker, e)}
+              >
+                {/* Marker dot */}
+                <div
+                  className={cn(
+                    'w-3 h-3 rounded-full cursor-pointer transition-all shadow-lg',
+                    'ring-2 ring-zinc-900',
+                    marker.color,
+                    isHovered && 'scale-150 ring-4',
+                    marker.prominence === 'primary' && 'w-4 h-4'
+                  )}
+                />
+
+                {/* Tooltip */}
+                <div className={cn(
+                  'absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-3 py-2',
+                  'bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl',
+                  'text-xs text-zinc-300 whitespace-nowrap z-50',
+                  'opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none'
+                )}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {marker.type === 'brand' && <Tag size={12} className="text-purple-400" />}
+                    {marker.type === 'concern' && <AlertTriangle size={12} className="text-amber-400" />}
+                    {marker.type === 'text' && <Eye size={12} className="text-cyan-400" />}
+                    <span className="font-medium">{marker.label}</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-500 space-y-0.5">
+                    <div>{formatTime(marker.startTime)} - {formatTime(marker.endTime)}</div>
+                    {marker.prominence && (
+                      <div className="capitalize">{marker.prominence} placement</div>
+                    )}
+                    {marker.confidence !== undefined && (
+                      <div>{Math.round(marker.confidence * 100)}% confidence</div>
+                    )}
+                  </div>
+                  {/* Arrow */}
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-zinc-900 rotate-45 border-r border-b border-zinc-700" />
                 </div>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-zinc-900 rotate-45 border-r border-b border-zinc-700" />
               </div>
+            );
+          })}
+
+          {/* Current playback position */}
+          {currentTime > 0 && (
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-white/80 z-20 pointer-events-none"
+              style={{ left: `${getPositionPercent(currentTime)}%` }}
+            >
+              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white rounded-full shadow-lg" />
             </div>
-          ))}
+          )}
         </div>
 
         {/* Time labels */}
-        <div className="flex justify-between mt-1 px-0.5">
+        <div className="flex justify-between mt-1.5 px-0.5">
           <span className="text-[10px] text-zinc-600">0:00</span>
+          <span className="text-[10px] text-zinc-400 font-mono">
+            {formatTime(currentTime)}
+          </span>
           <span className="text-[10px] text-zinc-600">{formatTime(duration)}</span>
         </div>
       </div>
@@ -143,29 +329,42 @@ export function VideoTimeline({ analysis, duration = 60, className }: VideoTimel
             <span className="text-[10px] text-zinc-500">Concerns</span>
           </div>
         )}
+        {markers.some(m => m.prominence === 'primary') && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[10px] text-zinc-500">Primary</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // Compact inline version for lists
-export function VideoTimelineCompact({ analysis, className }: { analysis: VisualAnalysisData; className?: string }) {
-  const hasContent = analysis.brands.length > 0 ||
-    analysis.textInVideo.length > 0 ||
-    analysis.sceneContext.concerns.length > 0;
+export function VideoTimelineCompact({
+  analysis,
+  className
+}: {
+  analysis: VisualAnalysisData;
+  className?: string;
+}) {
+  const hasBrands = analysis.brands.length > 0 || (analysis.logoDetections && analysis.logoDetections.length > 0);
+  const hasText = analysis.textInVideo.length > 0;
+  const hasConcerns = analysis.sceneContext.concerns.length > 0;
+  const hasContent = hasBrands || hasText || hasConcerns;
 
   if (!hasContent) return null;
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
       <div className="w-16 h-1 bg-zinc-800 rounded-full flex overflow-hidden">
-        {analysis.brands.length > 0 && (
+        {hasBrands && (
           <div className="flex-1 bg-purple-500" />
         )}
-        {analysis.textInVideo.length > 0 && (
+        {hasText && (
           <div className="flex-1 bg-cyan-500" />
         )}
-        {analysis.sceneContext.concerns.length > 0 && (
+        {hasConcerns && (
           <div className="flex-1 bg-amber-500" />
         )}
       </div>

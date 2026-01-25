@@ -1,14 +1,20 @@
 'use client';
 
-import { useEffect, useState, useMemo, use } from 'react';
+import { useEffect, useState, useMemo, useCallback, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle, Play } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { cn, getPlatformFromUrl } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { generateCreatorPdf } from '@/components/report/creator-pdf';
 import { VisualAnalysisPanel, VisualAnalysisSummary } from '@/components/report/visual-analysis-panel';
-import type { Finding, RiskLevel } from '@/types';
+import { VideoTimeline } from '@/components/report/video-timeline';
+import { VideoPlayer } from '@/components/report/video-player';
+import { SafetyScoreBreakdown, SafetyScoreCompact } from '@/components/report/safety-score-breakdown';
+import { BrandExposurePanel, BrandExposureSummary } from '@/components/report/brand-exposure-panel';
+import { TranscriptPanel, TranscriptCompact } from '@/components/report/transcript-panel';
+import { CompetitorAlert, CompetitorAlertCompact } from '@/components/report/competitor-alert';
+import type { Finding, RiskLevel, VisualAnalysisData } from '@/types';
 
 type Platform = 'instagram' | 'youtube' | 'tiktok' | 'web';
 type Filter = 'all' | 'flagged' | Platform;
@@ -82,6 +88,19 @@ export default function CreatorReportPage({
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
 
+  // Video playback synchronization state
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [seekToTime, setSeekToTime] = useState<number | undefined>();
+
+  // Handle seeking from timeline, transcript, or brand clicks
+  const handleSeekToTime = useCallback((time: number) => {
+    setSeekToTime(time);
+    // Clear after a short delay to allow video to seek
+    setTimeout(() => setSeekToTime(undefined), 100);
+  }, []);
+
   const t = useTranslations('creatorReport');
   const tRisk = useTranslations('risk');
   const tVerdict = useTranslations('verdict');
@@ -130,6 +149,36 @@ export default function CreatorReportPage({
 
     return Array.from(brandMap.values()).sort((a, b) => b.postCount - a.postCount);
   }, [creator?.attachments]);
+
+  // Extract competitor brand names for alerts
+  const competitorBrandNames = useMemo(() => {
+    return brandPartnerships
+      .filter(b => b.isCompetitor)
+      .map(b => b.brandName);
+  }, [brandPartnerships]);
+
+  // Aggregate logo detections across all social findings
+  const aggregatedLogoDetections = useMemo(() => {
+    const logoMap = new Map<string, { brand: string; appearances: Array<{ startTime: number; endTime: number; confidence: number; prominence?: 'primary' | 'secondary' | 'background' }>; totalDuration: number; likelySponsor: boolean }>();
+
+    for (const finding of (creator?.report?.findings || [])) {
+      const va = finding.socialMediaSource?.visualAnalysis as VisualAnalysisData | undefined;
+      if (!va?.logoDetections) continue;
+
+      for (const logo of va.logoDetections) {
+        const existing = logoMap.get(logo.brand);
+        if (existing) {
+          existing.appearances.push(...logo.appearances);
+          existing.totalDuration += logo.totalDuration;
+          existing.likelySponsor = existing.likelySponsor || logo.likelySponsor;
+        } else {
+          logoMap.set(logo.brand, { ...logo, appearances: [...logo.appearances] });
+        }
+      }
+    }
+
+    return Array.from(logoMap.values());
+  }, [creator?.report?.findings]);
 
   // Split findings into social posts and web findings
   const { socialFindings, webFindings, filteredFindings, stats } = useMemo(() => {
@@ -374,6 +423,12 @@ export default function CreatorReportPage({
                           {/* Visual analysis indicators */}
                           {finding.socialMediaSource?.visualAnalysis && (
                             <div className="flex items-center gap-1">
+                              {/* Video indicator */}
+                              {finding.socialMediaSource.mediaType === 'video' && (
+                                <div className="flex items-center gap-0.5 px-1 py-0.5 bg-zinc-900/80 rounded">
+                                  <Play className="w-2.5 h-2.5 text-white/70" />
+                                </div>
+                              )}
                               <div className="flex items-center gap-0.5 px-1 py-0.5 bg-zinc-900/80 rounded">
                                 <Eye className="w-2.5 h-2.5 text-blue-400" />
                               </div>
@@ -416,65 +471,153 @@ export default function CreatorReportPage({
         {/* Right: Context Panel */}
         <div className="w-[40%] overflow-y-auto">
           {selectedFinding ? (
-            // Finding Detail
-            <div className="p-8">
+            // Finding Detail - Enhanced with Video Player and Analysis Panels
+            <div className="p-6 space-y-6">
               <button
-                onClick={() => setSelectedFinding(null)}
-                className="text-zinc-600 hover:text-zinc-400 text-sm mb-6 transition-colors"
+                onClick={() => {
+                  setSelectedFinding(null);
+                  setCurrentVideoTime(0);
+                  setIsVideoPlaying(false);
+                }}
+                className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors"
               >
                 {t('backToSummary')}
               </button>
 
-              <div className="space-y-8">
-                {/* Header */}
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    {(() => {
-                      const platform = getPlatformFromFinding(selectedFinding);
-                      const Icon = platformIcons[platform];
-                      return <Icon className="w-4 h-4 text-zinc-600" />;
-                    })()}
-                    <span className={cn(
-                      'text-xs uppercase tracking-wider',
-                      selectedFinding.severity === 'critical' && 'text-red-500',
-                      selectedFinding.severity === 'high' && 'text-orange-500',
-                      selectedFinding.severity === 'medium' && 'text-amber-500',
-                      selectedFinding.severity === 'low' && 'text-emerald-500',
-                    )}>
-                      {tRisk(selectedFinding.severity)}
-                    </span>
-                  </div>
-                  <h2 className="text-zinc-200 font-light">{selectedFinding.title}</h2>
-                  {selectedFinding.source.publishedDate && (
-                    <p className="text-zinc-600 text-sm mt-1">{selectedFinding.source.publishedDate}</p>
+              {/* Header */}
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  {(() => {
+                    const platform = getPlatformFromFinding(selectedFinding);
+                    const Icon = platformIcons[platform];
+                    return <Icon className="w-4 h-4 text-zinc-600" />;
+                  })()}
+                  <span className={cn(
+                    'text-xs uppercase tracking-wider',
+                    selectedFinding.severity === 'critical' && 'text-red-500',
+                    selectedFinding.severity === 'high' && 'text-orange-500',
+                    selectedFinding.severity === 'medium' && 'text-amber-500',
+                    selectedFinding.severity === 'low' && 'text-emerald-500',
+                  )}>
+                    {tRisk(selectedFinding.severity)}
+                  </span>
+                </div>
+                <h2 className="text-zinc-200 font-light text-lg">{selectedFinding.title}</h2>
+                {selectedFinding.source.publishedDate && (
+                  <p className="text-zinc-600 text-sm mt-1">{selectedFinding.source.publishedDate}</p>
+                )}
+              </div>
+
+              {/* Video Player (for video content) */}
+              {selectedFinding.socialMediaSource?.mediaType === 'video' && (
+                <VideoPlayer
+                  src={selectedFinding.socialMediaSource.mediaUrl}
+                  poster={selectedFinding.socialMediaSource.thumbnailUrl}
+                  analysis={selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData}
+                  fallbackUrl={selectedFinding.source.url}
+                  onTimeUpdate={setCurrentVideoTime}
+                  onDurationChange={setVideoDuration}
+                  onPlayStateChange={setIsVideoPlaying}
+                  externalSeekTo={seekToTime}
+                  className="rounded-lg overflow-hidden"
+                />
+              )}
+
+              {/* Interactive Timeline */}
+              {selectedFinding.socialMediaSource?.visualAnalysis && (
+                <VideoTimeline
+                  analysis={selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData}
+                  duration={videoDuration || (selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).videoDuration}
+                  currentTime={currentVideoTime}
+                  isPlaying={isVideoPlaying}
+                  onSeek={handleSeekToTime}
+                  onTogglePlay={() => setIsVideoPlaying(!isVideoPlaying)}
+                  className="pb-4 border-b border-zinc-800"
+                />
+              )}
+
+              {/* Analysis Panels Grid */}
+              {selectedFinding.socialMediaSource?.visualAnalysis && (
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Safety Score Breakdown */}
+                  <SafetyScoreBreakdown
+                    classification={(selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).contentClassification}
+                    brandSafetyRating={selectedFinding.socialMediaSource.visualAnalysis.brandSafetyRating}
+                    className="p-4 bg-zinc-900/50 rounded-lg border border-zinc-800"
+                  />
+
+                  {/* Brand Exposure Panel */}
+                  {(selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).logoDetections && (
+                    <BrandExposurePanel
+                      logoDetections={(selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).logoDetections}
+                      videoDuration={videoDuration || (selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).videoDuration}
+                      onBrandClick={(brand, time) => handleSeekToTime(time)}
+                      className="p-4 bg-zinc-900/50 rounded-lg border border-zinc-800"
+                    />
+                  )}
+
+                  {/* Transcript Panel */}
+                  {((selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).transcriptSegments || selectedFinding.socialMediaSource.visualAnalysis.description) && (
+                    <TranscriptPanel
+                      segments={(selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData).transcriptSegments}
+                      fullText={selectedFinding.socialMediaSource.visualAnalysis.description}
+                      brands={selectedFinding.socialMediaSource.visualAnalysis.brands.map(b => b.brand)}
+                      currentTime={currentVideoTime}
+                      onSeek={handleSeekToTime}
+                      className="p-4 bg-zinc-900/50 rounded-lg border border-zinc-800 max-h-64"
+                    />
                   )}
                 </div>
+              )}
 
-                {/* Summary */}
-                <p className="text-zinc-400 text-sm leading-relaxed">{selectedFinding.summary}</p>
+              {/* Summary */}
+              <p className="text-zinc-400 text-sm leading-relaxed">{selectedFinding.summary}</p>
 
-                {/* Visual Analysis */}
-                {selectedFinding.socialMediaSource?.visualAnalysis && (
-                  <div className="pt-4 border-t border-zinc-800">
-                    <VisualAnalysisPanel analysis={selectedFinding.socialMediaSource.visualAnalysis} />
-                  </div>
-                )}
+              {/* Legacy Visual Analysis Panel (for non-video or basic data) */}
+              {selectedFinding.socialMediaSource?.visualAnalysis &&
+               !selectedFinding.socialMediaSource.visualAnalysis.logoDetections &&
+               !selectedFinding.socialMediaSource.visualAnalysis.contentClassification && (
+                <div className="pt-4 border-t border-zinc-800">
+                  <VisualAnalysisPanel
+                    analysis={selectedFinding.socialMediaSource.visualAnalysis}
+                    showTimeline={false}
+                  />
+                </div>
+              )}
 
-                {/* Source */}
-                <a
-                  href={selectedFinding.source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
-                >
-                  {t('viewSource')}
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
+              {/* Source Link */}
+              <a
+                href={selectedFinding.source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
+              >
+                {t('viewSource')}
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
           ) : (
-            // Summary
-            <div className="p-8 space-y-10">
+            // Summary - Enhanced with Video Analysis Insights
+            <div className="p-6 space-y-8">
+              {/* Competitor Alert (if any) */}
+              {competitorBrandNames.length > 0 && aggregatedLogoDetections.length > 0 && (
+                <CompetitorAlert
+                  logoDetections={aggregatedLogoDetections}
+                  competitorBrands={competitorBrandNames}
+                  onBrandClick={(brand, time) => {
+                    // Find the finding with this brand and select it
+                    const findingWithBrand = socialFindings.find(f => {
+                      const va = f.socialMediaSource?.visualAnalysis as VisualAnalysisData | undefined;
+                      return va?.logoDetections?.some(l => l.brand === brand);
+                    });
+                    if (findingWithBrand) {
+                      setSelectedFinding(findingWithBrand);
+                      handleSeekToTime(time);
+                    }
+                  }}
+                />
+              )}
+
               {/* Verdict */}
               <div>
                 <p className="text-zinc-600 text-xs uppercase tracking-wider mb-3">{t('verdict')}</p>
@@ -589,6 +732,13 @@ export default function CreatorReportPage({
 
               {/* Visual Analysis Summary */}
               <VisualAnalysisSummary findings={socialFindings} />
+
+              {/* Brand Exposure Summary (aggregated from all videos) */}
+              {aggregatedLogoDetections.length > 0 && (
+                <div className="p-4 bg-zinc-900/30 rounded-lg border border-zinc-800">
+                  <BrandExposureSummary logoDetections={aggregatedLogoDetections} />
+                </div>
+              )}
 
               {/* Risk Breakdown */}
               {report && (
