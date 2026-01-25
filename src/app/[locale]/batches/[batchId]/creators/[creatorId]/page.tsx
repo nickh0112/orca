@@ -95,6 +95,10 @@ export default function CreatorReportPage({
   const [filter, setFilter] = useState<Filter>('all');
   const [isSafetySummaryExpanded, setIsSafetySummaryExpanded] = useState(true);
 
+  // Tab navigation state
+  type ReportTab = 'content' | 'web' | 'analysis';
+  const [activeTab, setActiveTab] = useState<ReportTab>('content');
+
   // Video playback synchronization state
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
@@ -475,7 +479,47 @@ export default function CreatorReportPage({
         </div>
       )}
 
-      {/* Main Split View - 40/60 layout */}
+      {/* Tab Navigation */}
+      <div className="border-b border-zinc-900 px-6">
+        <div className="flex gap-6">
+          <button
+            onClick={() => setActiveTab('content')}
+            className={cn(
+              'py-3 text-sm border-b-2 -mb-px transition-colors',
+              activeTab === 'content'
+                ? 'border-zinc-200 text-zinc-200'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            )}
+          >
+            Content
+          </button>
+          <button
+            onClick={() => setActiveTab('web')}
+            className={cn(
+              'py-3 text-sm border-b-2 -mb-px transition-colors',
+              activeTab === 'web'
+                ? 'border-zinc-200 text-zinc-200'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            )}
+          >
+            Web Research ({webFindings.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('analysis')}
+            className={cn(
+              'py-3 text-sm border-b-2 -mb-px transition-colors',
+              activeTab === 'analysis'
+                ? 'border-zinc-200 text-zinc-200'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            )}
+          >
+            Analysis
+          </button>
+        </div>
+      </div>
+
+      {/* Content Tab - Main Split View - 40/60 layout */}
+      {activeTab === 'content' && (
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel: Flag Digest + Posts List (40%) */}
         <div className="w-[40%] border-r border-zinc-900 flex flex-col overflow-hidden">
@@ -797,39 +841,6 @@ export default function CreatorReportPage({
                   </div>
                 )}
 
-                {/* Web Findings */}
-                {webFindings.length > 0 && (
-                  <div className="mt-8 text-left">
-                    <p className="text-zinc-500 text-xs uppercase tracking-wider mb-3">
-                      Web Research ({webFindings.length})
-                    </p>
-                    <div className="space-y-2">
-                      {webFindings.slice(0, 3).map((finding, idx) => (
-                        <a
-                          key={idx}
-                          href={finding.source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-                        >
-                          <div className={cn(
-                            'w-1.5 h-1.5 rounded-full shrink-0',
-                            finding.severity === 'critical' && 'bg-red-500',
-                            finding.severity === 'high' && 'bg-orange-500',
-                            finding.severity === 'medium' && 'bg-amber-500',
-                            finding.severity === 'low' && 'bg-zinc-600',
-                          )} />
-                          <span className="truncate">{finding.title}</span>
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                        </a>
-                      ))}
-                      {webFindings.length > 3 && (
-                        <p className="text-xs text-zinc-600">+{webFindings.length - 3} more findings</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 {/* Social Profiles */}
                 {creator.socialLinks?.length > 0 && (
                   <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -852,6 +863,110 @@ export default function CreatorReportPage({
           )}
         </div>
       </div>
+      )}
+
+      {/* Web Research Tab */}
+      {activeTab === 'web' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-3xl mx-auto space-y-4">
+            <h2 className="text-zinc-300 text-lg font-light mb-4">
+              Web Research Findings
+            </h2>
+            {webFindings.length === 0 ? (
+              <p className="text-zinc-500 text-sm">No web research findings.</p>
+            ) : (
+              <div className="space-y-3">
+                {webFindings.map((finding, idx) => (
+                  <a
+                    key={idx}
+                    href={finding.source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-4 bg-zinc-900/50 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        'w-2 h-2 rounded-full mt-1.5 shrink-0',
+                        finding.severity === 'critical' && 'bg-red-500',
+                        finding.severity === 'high' && 'bg-orange-500',
+                        finding.severity === 'medium' && 'bg-amber-500',
+                        finding.severity === 'low' && 'bg-zinc-600',
+                      )} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-zinc-200 text-sm font-medium truncate">
+                            {finding.title}
+                          </span>
+                          <ExternalLink className="w-3 h-3 text-zinc-500 shrink-0" />
+                        </div>
+                        <p className="text-zinc-400 text-sm line-clamp-2 mb-2">
+                          {finding.summary}
+                        </p>
+                        <div className="flex items-center gap-3 text-xs text-zinc-500">
+                          <span className={cn(
+                            'px-1.5 py-0.5 rounded uppercase',
+                            finding.severity === 'critical' && 'bg-red-500/20 text-red-400',
+                            finding.severity === 'high' && 'bg-orange-500/20 text-orange-400',
+                            finding.severity === 'medium' && 'bg-amber-500/20 text-amber-400',
+                            finding.severity === 'low' && 'bg-zinc-700 text-zinc-400',
+                          )}>
+                            {finding.severity}
+                          </span>
+                          {finding.source.publishedDate && (
+                            <span>{finding.source.publishedDate}</span>
+                          )}
+                          <span className="truncate text-zinc-600">{finding.source.url}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Analysis Tab */}
+      {activeTab === 'analysis' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-zinc-300 text-lg font-light mb-4">
+              AI Analysis
+            </h2>
+            {report?.summary ? (
+              <div className="prose prose-invert prose-sm max-w-none">
+                <div className="p-6 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                  <p className="text-zinc-300 leading-relaxed whitespace-pre-line">
+                    {report.summary}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-zinc-500 text-sm">No analysis available.</p>
+            )}
+
+            {/* Search Queries Used */}
+            {report?.searchQueries && report.searchQueries.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-zinc-400 text-sm font-medium mb-3">
+                  Search Queries Used
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {report.searchQueries.map((query, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-1 text-xs bg-zinc-800 text-zinc-400 rounded"
+                    >
+                      {query}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
