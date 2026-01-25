@@ -12,6 +12,7 @@ import { VideoTimeline } from '@/components/report/video-timeline';
 import { VideoPlayer } from '@/components/report/video-player';
 import { SafetyScoreBreakdown, SafetyScoreCompact } from '@/components/report/safety-score-breakdown';
 import { BrandExposurePanel, BrandExposureSummary } from '@/components/report/brand-exposure-panel';
+import { BrandAssociationsPanel } from '@/components/report/brand-associations-panel';
 import { TranscriptPanel, TranscriptCompact } from '@/components/report/transcript-panel';
 import { CompetitorAlert, CompetitorAlertCompact } from '@/components/report/competitor-alert';
 import { SafetySummary, SafetyBadge } from '@/components/report/safety-summary';
@@ -96,7 +97,7 @@ export default function CreatorReportPage({
   const [isSafetySummaryExpanded, setIsSafetySummaryExpanded] = useState(true);
 
   // Tab navigation state
-  type ReportTab = 'content' | 'web' | 'analysis';
+  type ReportTab = 'content' | 'web' | 'analysis' | 'brands';
   const [activeTab, setActiveTab] = useState<ReportTab>('content');
 
   // Video playback synchronization state
@@ -186,25 +187,52 @@ export default function CreatorReportPage({
 
   // Aggregate logo detections across all social findings
   const aggregatedLogoDetections = useMemo(() => {
-    const logoMap = new Map<string, { brand: string; appearances: Array<{ startTime: number; endTime: number; confidence: number; prominence?: 'primary' | 'secondary' | 'background' }>; totalDuration: number; likelySponsor: boolean }>();
+    const logoMap = new Map<string, {
+      brand: string;
+      appearances: Array<{ startTime: number; endTime: number; confidence: number; prominence?: 'primary' | 'secondary' | 'background' }>;
+      totalDuration: number;
+      likelySponsor: boolean;
+      videoCount: number;
+      videoIds: Set<string>;
+    }>();
 
     for (const finding of (creator?.report?.findings || [])) {
       const va = finding.socialMediaSource?.visualAnalysis as VisualAnalysisData | undefined;
       if (!va?.logoDetections) continue;
 
+      const videoId = finding.socialMediaSource?.postId || finding.source.url;
+
       for (const logo of va.logoDetections) {
-        const existing = logoMap.get(logo.brand);
+        const normalizedBrand = logo.brand.toLowerCase();
+        const existing = logoMap.get(normalizedBrand);
         if (existing) {
           existing.appearances.push(...logo.appearances);
           existing.totalDuration += logo.totalDuration;
           existing.likelySponsor = existing.likelySponsor || logo.likelySponsor;
+          if (!existing.videoIds.has(videoId)) {
+            existing.videoIds.add(videoId);
+            existing.videoCount += 1;
+          }
         } else {
-          logoMap.set(logo.brand, { ...logo, appearances: [...logo.appearances] });
+          logoMap.set(normalizedBrand, {
+            ...logo,
+            appearances: [...logo.appearances],
+            videoCount: 1,
+            videoIds: new Set([videoId]),
+          });
         }
       }
     }
 
-    return Array.from(logoMap.values());
+    // Apply cross-video boost: brand appearing in 2+ different videos = likely sponsor
+    return Array.from(logoMap.values()).map(logo => {
+      if (!logo.likelySponsor && logo.videoCount >= 2) {
+        logo.likelySponsor = true;
+      }
+      // Remove the Set before returning (not serializable)
+      const { videoIds, ...rest } = logo;
+      return rest;
+    });
   }, [creator?.report?.findings]);
 
   // Split findings into social posts and web findings
@@ -514,6 +542,17 @@ export default function CreatorReportPage({
             )}
           >
             Analysis
+          </button>
+          <button
+            onClick={() => setActiveTab('brands')}
+            className={cn(
+              'py-3 text-sm border-b-2 -mb-px transition-colors',
+              activeTab === 'brands'
+                ? 'border-zinc-200 text-zinc-200'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            )}
+          >
+            Brands
           </button>
         </div>
       </div>
@@ -965,6 +1004,31 @@ export default function CreatorReportPage({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Brands Tab */}
+      {activeTab === 'brands' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <BrandAssociationsPanel
+            brandPartnerships={brandPartnerships}
+            logoDetections={aggregatedLogoDetections}
+            competitorBrandNames={competitorBrandNames}
+            onBrandClick={(brand, time) => {
+              // Find the finding with this brand and select it
+              const findingWithBrand = socialFindings.find(f => {
+                const va = f.socialMediaSource?.visualAnalysis as VisualAnalysisData | undefined;
+                return va?.logoDetections?.some(l => l.brand.toLowerCase() === brand.toLowerCase());
+              });
+              if (findingWithBrand) {
+                setActiveTab('content');
+                handlePostSelect(findingWithBrand);
+                if (time !== undefined) {
+                  handleSeekToTime(time);
+                }
+              }
+            }}
+          />
         </div>
       )}
     </div>

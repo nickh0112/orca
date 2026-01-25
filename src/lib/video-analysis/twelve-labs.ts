@@ -1024,16 +1024,40 @@ function parseLogoDetectionResponse(text: string): LogoDetection[] {
     }
   }
 
-  // Determine sponsor status based on prominence
+  // Determine sponsor status based on multiple signals
   const logos = Array.from(logoMap.values()).map((logo) => {
     logo.appearances.sort((a, b) => a.startTime - b.startTime);
 
     if (!logo.likelySponsor) {
+      // Signal 1: Primary prominence (strong signal)
       const hasPrimaryAppearance = logo.appearances.some(
         (a) => a.prominence === 'primary' && a.confidence > 0.7
       );
-      const significantDuration = logo.totalDuration > 5;
-      logo.likelySponsor = hasPrimaryAppearance || significantDuration;
+
+      // Signal 2: Secondary prominence with high confidence (intentional placement)
+      const hasProminentSecondary = logo.appearances.some(
+        (a) => a.prominence === 'secondary' && a.confidence > 0.85
+      );
+
+      // Signal 3: Duration threshold (lowered from 5s to 3s)
+      const significantDuration = logo.totalDuration > 3;
+
+      // Signal 4: Multiple distinct appearances (3+ suggests intentional)
+      const multipleAppearances = logo.appearances.length >= 3;
+
+      // Signal 5: High average confidence across appearances
+      const avgConfidence = logo.appearances.reduce((sum, a) => sum + a.confidence, 0) / logo.appearances.length;
+      const highAverageConfidence = avgConfidence > 0.8;
+
+      // Calculate sponsor score (threshold: 35)
+      let sponsorScore = 0;
+      if (hasPrimaryAppearance) sponsorScore += 40;
+      if (hasProminentSecondary) sponsorScore += 25;
+      if (significantDuration) sponsorScore += 20;
+      if (multipleAppearances) sponsorScore += 15;
+      if (highAverageConfidence) sponsorScore += 10;
+
+      logo.likelySponsor = sponsorScore >= 35;
     }
 
     return logo;
