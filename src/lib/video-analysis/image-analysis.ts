@@ -18,6 +18,13 @@ import {
   TextDetection,
   ImageAnalysisOptions,
   ProgressCallback,
+  SafetyRationale,
+  FlagEvidence,
+  CategoryScores,
+  CategoryScore,
+  FlagCategory,
+  FlagSeverity,
+  FlagSource,
 } from '@/types/video-analysis';
 
 const anthropic = new Anthropic({
@@ -141,24 +148,63 @@ export async function analyzeImage(
       imageData = await fetchImageAsBase64(imageUrl);
     }
 
-    const prompt = `Analyze this social media image for brand safety. Provide a structured analysis:
+    const prompt = `You are a professional brand safety consultant analyzing this image for a brand partnership evaluation.
 
-1. VISUAL DESCRIPTION: Describe the visual content, setting, and what's happening
-2. BRANDS/LOGOS: List any brands, logos, or products visible (with confidence level: high/medium/low)
-3. ON-SCREEN TEXT: List any text visible in the image
-4. SCENE CONTEXT: Describe the setting, mood, and type of content
-5. BRAND SAFETY: Rate as safe/caution/unsafe and explain why
+Analyze the image thoroughly and return a JSON object with this EXACT structure:
 
-Format your response EXACTLY as follows (use these exact labels):
-DESCRIPTION: [description]
-BRANDS: [brand1 (high confidence), brand2 (medium confidence), ...] or "none"
-TEXT: [text1, text2, ...] or "none"
-SETTING: [setting description]
-MOOD: [mood description]
-CONTENT_TYPE: [e.g., selfie, product shot, lifestyle, etc.]
-CONCERNS: [concern1, concern2, ...] or "none"
-SAFETY_RATING: [safe/caution/unsafe]
-SAFETY_REASON: [explanation]`;
+{
+  "visual": {
+    "description": "Detailed 2-3 sentence description of image content",
+    "setting": "Where the image takes place",
+    "mood": "Overall tone (e.g., energetic, calm, glamorous)",
+    "contentType": "e.g., selfie, product shot, lifestyle, event"
+  },
+
+  "safetyAnalysis": {
+    "rating": "safe|caution|unsafe",
+    "summary": "Professional 2-3 sentence summary explaining the safety assessment.",
+
+    "evidence": [
+      {
+        "category": "profanity|violence|adult|substances|controversial|dangerous|political",
+        "severity": "low|medium|high",
+        "source": "visual|text",
+        "description": "what was detected",
+        "context": "surrounding context explaining why this was flagged"
+      }
+    ],
+
+    "categoryScores": {
+      "profanity": {"score": 0, "reason": "explanation of what was found or looked for"},
+      "violence": {"score": 0, "reason": "explanation"},
+      "adult": {"score": 0, "reason": "explanation"},
+      "substances": {"score": 0, "reason": "explanation"},
+      "controversial": {"score": 0, "reason": "explanation"},
+      "dangerous": {"score": 0, "reason": "explanation"},
+      "political": {"score": 0, "reason": "explanation"}
+    }
+  },
+
+  "brands": [
+    {
+      "name": "Brand Name",
+      "prominence": "primary|secondary|background",
+      "isSponsor": true,
+      "confidence": 0.9,
+      "sponsorEvidence": "why this appears to be sponsored (if applicable)"
+    }
+  ],
+
+  "textInImage": ["any", "visible", "text"]
+}
+
+IMPORTANT INSTRUCTIONS:
+1. Score 0-100 for each category (0 = none detected)
+2. Always explain what you looked for even if score is 0
+3. Evidence array should be empty for completely safe images
+4. For sponsor detection, look for: prominent product placement, tagged brands, promotional context, discount codes
+5. Write the summary as a professional consultant delivering findings to a client
+6. Be thorough - missing something is worse than over-flagging`;
 
     const response = await withRetry(async () => {
       return anthropic.messages.create({
@@ -189,7 +235,7 @@ SAFETY_REASON: [explanation]`;
     const rawAnalysis =
       response.content[0].type === 'text' ? response.content[0].text : '';
 
-    const analysis = parseVisualAnalysis(rawAnalysis);
+    const analysis = parseComprehensiveImageAnalysis(rawAnalysis);
 
     console.log(
       `[Claude Vision] Analysis complete: ${analysis.brands.length} brands, ` +
@@ -255,7 +301,171 @@ export async function analyzeImages(
 }
 
 /**
- * Parse the raw analysis text into structured format
+ * Helper to parse a category score from the API response
+ */
+function parseCategoryScore(data: { score?: number; reason?: string } | undefined): CategoryScore {
+  return {
+    score: data?.score ?? 0,
+    reason: data?.reason || 'No analysis available',
+    evidenceCount: 0,
+  };
+}
+
+/**
+ * Helper to validate and normalize flag category
+ */
+function normalizeCategory(category: string): FlagCategory {
+  const validCategories: FlagCategory[] = [
+    'profanity', 'violence', 'adult', 'substances',
+    'controversial', 'dangerous', 'political', 'competitor', 'sponsor'
+  ];
+  const normalized = category.toLowerCase() as FlagCategory;
+  return validCategories.includes(normalized) ? normalized : 'controversial';
+}
+
+/**
+ * Helper to validate and normalize flag severity
+ */
+function normalizeSeverity(severity: string): FlagSeverity {
+  const validSeverities: FlagSeverity[] = ['low', 'medium', 'high'];
+  const normalized = severity.toLowerCase() as FlagSeverity;
+  return validSeverities.includes(normalized) ? normalized : 'medium';
+}
+
+/**
+ * Helper to validate and normalize flag source
+ */
+function normalizeSource(source: string): FlagSource {
+  const validSources: FlagSource[] = ['audio', 'visual', 'text', 'transcript'];
+  const normalized = source.toLowerCase() as FlagSource;
+  return validSources.includes(normalized) ? normalized : 'visual';
+}
+
+/**
+ * Parse comprehensive JSON image analysis response
+ * Returns structured VisualAnalysis with SafetyRationale matching video analysis format
+ */
+function parseComprehensiveImageAnalysis(rawText: string): VisualAnalysis {
+  try {
+    // Extract JSON from response
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn('[Claude Vision] No JSON found in response, falling back to legacy parsing');
+      return parseVisualAnalysis(rawText);
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Parse visual section
+    const visual = parsed.visual || {};
+    const safetyAnalysis = parsed.safetyAnalysis || {};
+
+    // Parse evidence array
+    const evidence: FlagEvidence[] = (safetyAnalysis.evidence || []).map((e: {
+      category?: string;
+      severity?: string;
+      source?: string;
+      description?: string;
+      context?: string;
+    }) => ({
+      category: normalizeCategory(e.category || 'controversial'),
+      severity: normalizeSeverity(e.severity || 'medium'),
+      timestamp: 0, // Images don't have timestamps
+      source: normalizeSource(e.source || 'visual'),
+      description: e.description || '',
+      context: e.context,
+    }));
+
+    // Count evidence per category
+    const evidenceCounts: Record<string, number> = {};
+    for (const e of evidence) {
+      evidenceCounts[e.category] = (evidenceCounts[e.category] || 0) + 1;
+    }
+
+    // Parse category scores
+    const rawCategoryScores = safetyAnalysis.categoryScores || {};
+    const categoryScores: CategoryScores = {
+      profanity: { ...parseCategoryScore(rawCategoryScores.profanity), evidenceCount: evidenceCounts['profanity'] || 0 },
+      violence: { ...parseCategoryScore(rawCategoryScores.violence), evidenceCount: evidenceCounts['violence'] || 0 },
+      adult: { ...parseCategoryScore(rawCategoryScores.adult), evidenceCount: evidenceCounts['adult'] || 0 },
+      substances: { ...parseCategoryScore(rawCategoryScores.substances), evidenceCount: evidenceCounts['substances'] || 0 },
+      controversial: { ...parseCategoryScore(rawCategoryScores.controversial), evidenceCount: evidenceCounts['controversial'] || 0 },
+      dangerous: { ...parseCategoryScore(rawCategoryScores.dangerous), evidenceCount: evidenceCounts['dangerous'] || 0 },
+      political: { ...parseCategoryScore(rawCategoryScores.political), evidenceCount: evidenceCounts['political'] || 0 },
+    };
+
+    // Build SafetyRationale
+    const safetyRationale: SafetyRationale = {
+      summary: safetyAnalysis.summary || '',
+      evidence,
+      categoryScores,
+      coverageStats: {
+        videoDuration: 0, // Not applicable for images
+        transcriptWords: 0,
+        framesAnalyzed: 1, // Single image
+      },
+    };
+
+    // Determine safety rating
+    const safetyRating = safetyAnalysis.rating?.toLowerCase() || 'safe';
+
+    // Extract concerns from evidence for backwards compatibility
+    const concerns = evidence
+      .filter(e => e.severity === 'medium' || e.severity === 'high')
+      .map(e => e.description || `${e.category} detected`)
+      .slice(0, 5);
+
+    // Parse brands with sponsor detection
+    const brands: BrandDetection[] = (parsed.brands || []).map((b: {
+      name: string;
+      prominence?: string;
+      isSponsor?: boolean;
+      confidence?: number;
+      sponsorEvidence?: string;
+    }) => ({
+      brand: b.name,
+      confidence: b.confidence && b.confidence >= 0.7 ? 'high' as const :
+                  b.confidence && b.confidence >= 0.4 ? 'medium' as const : 'low' as const,
+      confidenceScore: b.confidence,
+      context: b.sponsorEvidence || `Detected in image (${b.prominence || 'unknown'} placement)`,
+      detectionMethod: 'visual' as const,
+      appearsSponsor: b.isSponsor || false,
+    }));
+
+    // Parse text in image
+    const textInImage: TextDetection[] = (parsed.textInImage || [])
+      .filter((t: string) => t && t.toLowerCase() !== 'none')
+      .map((t: string) => ({
+        text: t,
+        context: 'Detected in image via Claude Vision',
+      }));
+
+    const result: VisualAnalysis = {
+      description: visual.description || '',
+      brands,
+      actions: [], // Images don't have actions
+      textInVideo: textInImage,
+      sceneContext: {
+        setting: visual.setting || '',
+        mood: visual.mood || '',
+        contentType: visual.contentType || '',
+        concerns,
+      },
+      brandSafetyRating: safetyRating as 'safe' | 'caution' | 'unsafe',
+      rawAnalysis: rawText,
+      safetyRationale,
+    };
+
+    return result;
+  } catch (error) {
+    console.error('[Claude Vision] Failed to parse comprehensive analysis:', error);
+    // Fall back to legacy parsing
+    return parseVisualAnalysis(rawText);
+  }
+}
+
+/**
+ * Parse the raw analysis text into structured format (legacy format)
  */
 function parseVisualAnalysis(rawText: string): VisualAnalysis {
   const lines = rawText.split('\n');
