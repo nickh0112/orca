@@ -134,13 +134,20 @@ export default function DashboardPage() {
     if (!stats?.activityTrend) return [];
 
     // Return zeros until real trend data is available from the API
-    return stats.activityTrend.map((item) => ({
-      month: item.month,
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-    }));
+    return stats.activityTrend.map((item) => {
+      // Convert "2026-01" to "Jan" format
+      const [year, monthNum] = item.month.split('-');
+      const date = new Date(parseInt(year), parseInt(monthNum) - 1);
+      const shortMonth = date.toLocaleDateString('en-US', { month: 'short' });
+
+      return {
+        month: shortMonth,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      };
+    });
   }, [stats?.activityTrend]);
 
   // Transform data for BatchesTable
