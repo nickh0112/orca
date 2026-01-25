@@ -587,6 +587,14 @@ export default function CreatorReportPage({
                 )}
               </div>
 
+              {/* Post Info */}
+              <div className="pb-3">
+                <p className="text-sm text-zinc-400 leading-relaxed">{selectedFinding.summary}</p>
+                {selectedFinding.source.publishedDate && (
+                  <p className="text-xs text-zinc-600 mt-2">Published: {selectedFinding.source.publishedDate}</p>
+                )}
+              </div>
+
               {/* Evidence Detail Section */}
               {selectedFlagEvidence ? (
                 <div className="p-4 bg-zinc-900/50 rounded-lg border border-zinc-800 space-y-3">
@@ -691,14 +699,6 @@ export default function CreatorReportPage({
                   )}
                 </div>
               )}
-
-              {/* Post Info */}
-              <div className="pt-3 border-t border-zinc-800">
-                <p className="text-sm text-zinc-400 leading-relaxed">{selectedFinding.summary}</p>
-                {selectedFinding.source.publishedDate && (
-                  <p className="text-xs text-zinc-600 mt-2">Published: {selectedFinding.source.publishedDate}</p>
-                )}
-              </div>
             </div>
           ) : (
             // Overview - Select a post to review
