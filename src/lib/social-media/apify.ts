@@ -3,7 +3,7 @@
  *
  * Uses Apify actors to fetch social media content with direct video URLs:
  * - TikTok Scraper: https://apify.com/clockworks/tiktok-scraper
- * - Instagram Scraper: https://apify.com/apify/instagram-scraper
+ * - Instagram Post Scraper: https://apify.com/apify/instagram-post-scraper
  *
  * Cost: ~$0.30-0.50 per 1K posts (pay-as-you-go)
  */
@@ -20,7 +20,7 @@ const APIFY_API_BASE = 'https://api.apify.com/v2';
 // Actor IDs for the scrapers
 const ACTORS = {
   TIKTOK: 'clockworks~tiktok-scraper',
-  INSTAGRAM: 'apify~instagram-scraper',
+  INSTAGRAM: 'apify~instagram-post-scraper',
 };
 
 // Configuration
@@ -29,6 +29,27 @@ const CONFIG = {
   RUN_TIMEOUT_MS: 300000, // 5 minutes
   POLL_INTERVAL_MS: 5000, // 5 seconds
 };
+
+/**
+ * Apify error object returned in dataset when scraping fails
+ * (e.g., private account, empty data, rate limited)
+ */
+interface ApifyError {
+  error: string;
+  errorDescription?: string;
+}
+
+/**
+ * Type guard to detect Apify error objects in results
+ */
+function isApifyError(item: unknown): item is ApifyError {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'error' in item &&
+    typeof (item as ApifyError).error === 'string'
+  );
+}
 
 /**
  * Check if Apify is configured
@@ -140,7 +161,7 @@ export async function fetchTikTokViaApify(
         body: JSON.stringify({
           profiles: [handle],
           resultsPerPage: CONFIG.MAX_POSTS_DEFAULT,
-          shouldDownloadVideos: false, // We just need URLs
+          shouldDownloadVideos: true, // Required to get video URLs - Apify hosts the video
           shouldDownloadCovers: false,
         }),
       }
@@ -166,32 +187,62 @@ export async function fetchTikTokViaApify(
       throw new Error('TikTok scraper run failed');
     }
 
-    // Get results
-    const results = await getRunResults<ApifyTikTokPost>(runId);
+    // Get results - use unknown type to check for errors first
+    const results = await getRunResults<unknown>(runId);
 
-    console.log(`[Apify] Got ${results.length} TikTok posts for @${handle}`);
+    // Check for error objects in results (Apify returns these for private/empty accounts)
+    const errorItem = results.find(isApifyError);
+    if (errorItem) {
+      console.error(
+        `[Apify] TikTok error for @${handle}: ${errorItem.error} - ${errorItem.errorDescription || 'No description'}`
+      );
+      return {
+        platform: 'tiktok',
+        handle,
+        posts: [],
+        fetchedAt: new Date().toISOString(),
+        error: `Apify: ${errorItem.errorDescription || errorItem.error}`,
+      };
+    }
+
+    // Filter to valid posts only (exclude any error objects)
+    const validPosts = (results as ApifyTikTokPost[]).filter(
+      (post) => !isApifyError(post) && post.id
+    );
+
+    console.log(`[Apify] Got ${validPosts.length} TikTok posts for @${handle}`);
 
     // Convert to SocialMediaPost format and filter by date
-    const posts: SocialMediaPost[] = results
+    const posts: SocialMediaPost[] = validPosts
       .filter((post) => {
         const postDate = new Date(post.createTime * 1000);
         return postDate >= cutoffDate;
       })
-      .map((post) => ({
-        id: post.id,
-        caption: post.text || '',
-        permalink: post.webVideoUrl,
-        timestamp: new Date(post.createTime * 1000).toISOString(),
-        engagement: {
-          likes: post.diggCount,
-          comments: post.commentCount,
-          views: post.playCount,
-          shares: post.shareCount,
-        },
-        mediaUrl: post.videoMeta?.downloadUrl || post.videoMeta?.playUrl || post.webVideoUrl,
-        thumbnailUrl: post.videoMeta?.coverUrl,
-        mediaType: 'video' as const,
-      }));
+      .map((post) => {
+        // Priority: mediaUrls (Apify-hosted) > videoMeta URLs > webVideoUrl (fallback, won't work)
+        const mediaUrl = post.mediaUrls?.[0] || post.videoMeta?.downloadUrl || post.videoMeta?.playUrl || post.webVideoUrl;
+
+        // Log a warning if we're falling back to webVideoUrl (which won't work for video analysis)
+        if (!post.mediaUrls?.[0] && !post.videoMeta?.downloadUrl && !post.videoMeta?.playUrl) {
+          console.warn(`[Apify] TikTok post ${post.id} has no direct video URL, falling back to web URL (won't work for analysis)`);
+        }
+
+        return {
+          id: post.id,
+          caption: post.text || '',
+          permalink: post.webVideoUrl,
+          timestamp: new Date(post.createTime * 1000).toISOString(),
+          engagement: {
+            likes: post.diggCount,
+            comments: post.commentCount,
+            views: post.playCount,
+            shares: post.shareCount,
+          },
+          mediaUrl,
+          thumbnailUrl: post.videoMeta?.coverUrl,
+          mediaType: 'video' as const,
+        };
+      });
 
     console.log(
       `[Apify] Filtered to ${posts.length} TikTok posts within date range, ` +
@@ -247,10 +298,9 @@ export async function fetchInstagramViaApify(
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({
-          usernames: [handle],
+          username: [handle],
           resultsLimit: CONFIG.MAX_POSTS_DEFAULT,
-          resultsType: 'posts',
-          addParentData: false,
+          onlyPostsNewerThan: cutoffDate.toISOString().split('T')[0], // YYYY-MM-DD format
         }),
       }
     );
@@ -275,13 +325,33 @@ export async function fetchInstagramViaApify(
       throw new Error('Instagram scraper run failed');
     }
 
-    // Get results
-    const results = await getRunResults<ApifyInstagramPost>(runId);
+    // Get results - use unknown type to check for errors first
+    const results = await getRunResults<unknown>(runId);
 
-    console.log(`[Apify] Got ${results.length} Instagram posts for @${handle}`);
+    // Check for error objects in results (Apify returns these for private/empty accounts)
+    const errorItem = results.find(isApifyError);
+    if (errorItem) {
+      console.error(
+        `[Apify] Instagram error for @${handle}: ${errorItem.error} - ${errorItem.errorDescription || 'No description'}`
+      );
+      return {
+        platform: 'instagram',
+        handle,
+        posts: [],
+        fetchedAt: new Date().toISOString(),
+        error: `Apify: ${errorItem.errorDescription || errorItem.error}`,
+      };
+    }
+
+    // Filter to valid posts only (exclude any error objects)
+    const validPosts = (results as ApifyInstagramPost[]).filter(
+      (post) => !isApifyError(post) && post.shortCode
+    );
+
+    console.log(`[Apify] Got ${validPosts.length} Instagram posts for @${handle}`);
 
     // Convert to SocialMediaPost format and filter by date
-    const posts: SocialMediaPost[] = results
+    const posts: SocialMediaPost[] = validPosts
       .filter((post) => {
         const postDate = new Date(post.timestamp);
         return postDate >= cutoffDate;
@@ -295,9 +365,9 @@ export async function fetchInstagramViaApify(
           likes: post.likesCount,
           comments: post.commentsCount,
         },
-        mediaUrl: post.isVideo ? post.videoUrl : post.displayUrl,
+        mediaUrl: post.type === 'Video' ? post.videoUrl : post.displayUrl,
         thumbnailUrl: post.displayUrl,
-        mediaType: post.isVideo ? ('video' as const) : ('image' as const),
+        mediaType: post.type === 'Video' ? ('video' as const) : ('image' as const),
       }));
 
     console.log(
@@ -330,20 +400,38 @@ export async function fetchInstagramViaApify(
 export async function downloadVideo(
   videoUrl: string
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
+  console.log(`[Video Download] Attempting to download: ${videoUrl.slice(0, 80)}...`);
+
   try {
-    const response = await fetch(videoUrl);
+    // Determine platform from URL for appropriate headers
+    const isTikTok = videoUrl.includes('tiktok') || videoUrl.includes('musical.ly');
+    const isInstagram = videoUrl.includes('instagram') || videoUrl.includes('cdninstagram');
+
+    const headers: HeadersInit = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    };
+
+    // Add platform-specific headers
+    if (isTikTok) {
+      headers['Referer'] = 'https://www.tiktok.com/';
+    } else if (isInstagram) {
+      headers['Referer'] = 'https://www.instagram.com/';
+    }
+
+    const response = await fetch(videoUrl, { headers });
 
     if (!response.ok) {
-      console.error(`Failed to download video: ${response.status}`);
+      console.error(`[Video Download] Failed: ${response.status} ${response.statusText}`);
       return null;
     }
 
     const contentType = response.headers.get('content-type') || 'video/mp4';
     const buffer = Buffer.from(await response.arrayBuffer());
 
+    console.log(`[Video Download] Success: ${(buffer.length / 1024 / 1024).toFixed(2)}MB, type: ${contentType}`);
     return { buffer, contentType };
   } catch (error) {
-    console.error('Video download error:', error);
+    console.error('[Video Download] Error:', error);
     return null;
   }
 }
