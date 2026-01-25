@@ -149,11 +149,15 @@ export default function DashboardPage() {
     if (!stats?.recentBatches) return [];
 
     return stats.recentBatches.slice(0, 8).map((batch) => ({
-      ...batch,
+      id: batch.id,
+      name: batch.name,
+      status: batch.status,
+      searchTerms: null,
       userEmail: batch.userEmail,
+      clientName: batch.clientName ?? null,
+      createdAt: new Date(batch.createdAt),
+      updatedAt: new Date(batch.createdAt),
       completedAt: null,
-      completedCount: batch.completedCount || (batch.status === 'COMPLETED' ? batch.creatorCount : 0),
-      riskBreakdown: batch.riskBreakdown || { critical: 0, high: 0, medium: 0, low: 0 },
       _count: { creators: batch.creatorCount },
     }));
   }, [stats?.recentBatches]);
