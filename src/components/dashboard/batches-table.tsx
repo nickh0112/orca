@@ -183,7 +183,7 @@ export function BatchesTable({ batches, className }: BatchesTableProps) {
       <div className="overflow-x-auto">
         <div className="min-w-[700px]">
           {/* Header */}
-          <div className="grid grid-cols-[minmax(180px,1fr)_100px_100px_80px_100px_70px_90px] gap-3 px-4 py-3 bg-zinc-900/50 border-b border-zinc-800">
+          <div className="grid grid-cols-[minmax(180px,1fr)_100px_100px_80px_100px_80px_100px] gap-3 px-4 py-3 bg-zinc-900/50 border-b border-zinc-800">
             <SortHeader
               label="Name"
               field="name"
@@ -241,7 +241,7 @@ export function BatchesTable({ batches, className }: BatchesTableProps) {
                 >
                   <div
                     className={cn(
-                      'grid grid-cols-[minmax(180px,1fr)_100px_100px_80px_100px_70px_90px] gap-3 px-4 py-3 items-center',
+                      'grid grid-cols-[minmax(180px,1fr)_100px_100px_80px_100px_80px_100px] gap-3 px-4 py-3 items-center',
                       'transition-colors hover:bg-zinc-900/30'
                     )}
                   >

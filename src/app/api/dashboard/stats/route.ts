@@ -144,9 +144,53 @@ export async function GET(request: NextRequest) {
       take: 10,
       orderBy: { createdAt: 'desc' },
       where: userFilter,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        userEmail: true,
+        clientName: true,
+        createdAt: true,
+        completedAt: true,
         _count: { select: { creators: true } },
+        creators: {
+          select: {
+            status: true,
+            report: {
+              select: {
+                riskLevel: true,
+              },
+            },
+          },
+        },
       },
+    });
+
+    // Transform to include completedCount and riskBreakdown
+    const recentBatchesTransformed = recentBatches.map((batch) => {
+      const completedCount = batch.creators.filter(
+        (c) => c.status === 'COMPLETED'
+      ).length;
+
+      const riskBreakdown = {
+        critical: batch.creators.filter((c) => c.report?.riskLevel === 'CRITICAL').length,
+        high: batch.creators.filter((c) => c.report?.riskLevel === 'HIGH').length,
+        medium: batch.creators.filter((c) => c.report?.riskLevel === 'MEDIUM').length,
+        low: batch.creators.filter((c) => c.report?.riskLevel === 'LOW').length,
+      };
+
+      return {
+        id: batch.id,
+        name: batch.name,
+        creatorCount: batch._count.creators,
+        userEmail: batch.userEmail,
+        clientName: batch.clientName,
+        createdAt: batch.createdAt,
+        completedAt: batch.completedAt,
+        status: batch.status,
+        completedCount,
+        riskBreakdown,
+      };
     });
 
     return NextResponse.json({
@@ -159,14 +203,7 @@ export async function GET(request: NextRequest) {
       teamActivity: teamActivityWithCreators,
       riskDistribution,
       activityTrend,
-      recentBatches: recentBatches.map((b) => ({
-        id: b.id,
-        name: b.name,
-        creatorCount: b._count.creators,
-        userEmail: b.userEmail,
-        createdAt: b.createdAt,
-        status: b.status,
-      })),
+      recentBatches: recentBatchesTransformed,
     });
   } catch (error) {
     console.error('Failed to fetch dashboard stats:', error);
