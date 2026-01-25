@@ -22,6 +22,7 @@ import { searchFlaggedTopics, isGoogleSearchConfigured } from '@/lib/google-sear
 import { convertBrandResults, convertKeywordResults, convertWebSearchResults } from '@/lib/v1-adapter';
 import { extractSocialHandles } from '@/lib/utils';
 import type { PlatformStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 // Concurrency settings - increased for higher throughput with upgraded API limits
 const CONCURRENT_CREATORS = 25; // Process 25 creators at a time for better throughput
@@ -111,6 +112,7 @@ export async function GET(
         sendEvent('creator_started', {
           creatorId: creator.id,
           name: creator.name,
+          timestamp: Date.now(),
         });
 
         try {
@@ -139,6 +141,55 @@ export async function GET(
           const handleNames = handles.map(h => h.handle);
           const monthsBack = creator.monthsBack || 6; // Default to 6 months if not specified
 
+          // Generate search IDs for tracking
+          const exaSearchId = randomUUID();
+          const googleSearchId = randomUUID();
+          const exaQuery = `${creator.name} ${searchTerms.join(' ')}`.trim();
+
+          // Emit search started events
+          sendEvent('search_started', {
+            creatorId: creator.id,
+            searchId: exaSearchId,
+            query: exaQuery,
+            source: 'exa',
+            timestamp: Date.now(),
+          });
+
+          if (isGoogleSearchConfigured()) {
+            sendEvent('search_started', {
+              creatorId: creator.id,
+              searchId: googleSearchId,
+              query: `${creator.name} flagged topics`,
+              source: 'google',
+              timestamp: Date.now(),
+            });
+          }
+
+          // Emit platform started events
+          if (hasInstagram) {
+            sendEvent('platform_started', {
+              creatorId: creator.id,
+              platform: 'instagram',
+              timestamp: Date.now(),
+            });
+          }
+          if (hasYoutube) {
+            sendEvent('platform_started', {
+              creatorId: creator.id,
+              platform: 'youtube',
+              timestamp: Date.now(),
+            });
+          }
+          if (hasTiktok) {
+            sendEvent('platform_started', {
+              creatorId: creator.id,
+              platform: 'tiktok',
+              timestamp: Date.now(),
+            });
+          }
+
+          const searchStartTime = Date.now();
+
           const [exaResult, googleResult, socialMediaContent] = await Promise.all([
             searchCreator(creator.name, socialLinks, searchTerms),
             isGoogleSearchConfigured()
@@ -147,7 +198,39 @@ export async function GET(
             fetchAllSocialMedia(socialLinks, monthsBack),
           ]);
 
+          const searchDurationMs = Date.now() - searchStartTime;
+
           const { results, queries } = exaResult;
+
+          // Emit search completed events
+          sendEvent('search_completed', {
+            creatorId: creator.id,
+            searchId: exaSearchId,
+            resultsCount: results.length,
+            durationMs: searchDurationMs,
+            timestamp: Date.now(),
+          });
+
+          if (isGoogleSearchConfigured()) {
+            sendEvent('search_completed', {
+              creatorId: creator.id,
+              searchId: googleSearchId,
+              resultsCount: googleResult.results.length,
+              durationMs: searchDurationMs,
+              timestamp: Date.now(),
+            });
+          }
+
+          // Emit platform completed events
+          for (const content of socialMediaContent) {
+            sendEvent('platform_completed', {
+              creatorId: creator.id,
+              platform: content.platform,
+              postsCount: content.posts.length,
+              durationMs: searchDurationMs,
+              timestamp: Date.now(),
+            });
+          }
 
           // Update web search status
           await updatePlatformStatus(creator.id, 'web', 'READY');
@@ -160,6 +243,14 @@ export async function GET(
             }, 'web');
           }
 
+          // Emit analysis step: validation
+          sendEvent('analysis_step', {
+            creatorId: creator.id,
+            step: 'validation',
+            status: 'started',
+            timestamp: Date.now(),
+          });
+
           // Validate Exa results with heuristics + AI review
           const validatedResults = await validateResults(
             results,
@@ -167,8 +258,27 @@ export async function GET(
             socialLinks
           );
 
+          sendEvent('analysis_step', {
+            creatorId: creator.id,
+            step: 'validation',
+            status: 'completed',
+            timestamp: Date.now(),
+          });
+
           // Analyze validated Exa findings
           const exaFindings = analyzeValidatedResults(validatedResults, creator.name);
+
+          // Emit findings discovered for web search findings
+          for (const finding of exaFindings) {
+            sendEvent('finding_discovered', {
+              creatorId: creator.id,
+              title: finding.title,
+              severity: finding.severity,
+              type: finding.type,
+              source: finding.source.url,
+              timestamp: Date.now(),
+            });
+          }
 
           // Track profanity across all content
           let allProfanityResults: ReturnType<typeof detectProfanity>[] = [];
@@ -182,8 +292,44 @@ export async function GET(
             const totalPosts = socialMediaContent.reduce((sum, c) => sum + c.posts.length, 0);
             if (totalPosts > 0) {
               console.log(`Analyzing ${totalPosts} social media posts for ${creator.name}`);
+
+              // Emit content analysis step
+              sendEvent('analysis_step', {
+                creatorId: creator.id,
+                step: 'content_analysis',
+                status: 'started',
+                timestamp: Date.now(),
+              });
+
               socialMediaAnalyses = await analyzeSocialMediaContent(socialMediaContent, creator.name, creator.language || 'en');
               socialMediaFindings = convertAnalysisToFindings(socialMediaAnalyses);
+
+              sendEvent('analysis_step', {
+                creatorId: creator.id,
+                step: 'content_analysis',
+                status: 'completed',
+                timestamp: Date.now(),
+              });
+
+              // Emit findings discovered for social media findings
+              for (const finding of socialMediaFindings) {
+                sendEvent('finding_discovered', {
+                  creatorId: creator.id,
+                  title: finding.title,
+                  severity: finding.severity,
+                  type: finding.type,
+                  source: finding.source.url,
+                  timestamp: Date.now(),
+                });
+              }
+
+              // Emit profanity check step
+              sendEvent('analysis_step', {
+                creatorId: creator.id,
+                step: 'profanity_check',
+                status: 'started',
+                timestamp: Date.now(),
+              });
 
               // Run profanity detection and brand partnership extraction on each platform's content
               for (const platformContent of socialMediaContent) {
@@ -224,12 +370,41 @@ export async function GET(
                 // Update platform status
                 await updatePlatformStatus(creator.id, platform as 'instagram' | 'youtube' | 'tiktok', platformStatus);
               }
+
+              sendEvent('analysis_step', {
+                creatorId: creator.id,
+                step: 'profanity_check',
+                status: 'completed',
+                timestamp: Date.now(),
+              });
+
+              // Emit brand detection step
+              sendEvent('analysis_step', {
+                creatorId: creator.id,
+                step: 'brand_detection',
+                status: 'started',
+                timestamp: Date.now(),
+              });
+
+              sendEvent('analysis_step', {
+                creatorId: creator.id,
+                step: 'brand_detection',
+                status: 'completed',
+                timestamp: Date.now(),
+              });
             }
           }
 
           // Identify competitors if client brand is provided
           let competitors: string[] = [];
           if (creator.clientBrand) {
+            sendEvent('analysis_step', {
+              creatorId: creator.id,
+              step: 'competitor_analysis',
+              status: 'started',
+              timestamp: Date.now(),
+            });
+
             console.log(`Identifying competitors for client brand: ${creator.clientBrand}`);
             competitors = await identifyCompetitors(creator.clientBrand);
             if (competitors.length > 0) {
@@ -238,6 +413,13 @@ export async function GET(
                 competitors,
               });
             }
+
+            sendEvent('analysis_step', {
+              creatorId: creator.id,
+              step: 'competitor_analysis',
+              status: 'completed',
+              timestamp: Date.now(),
+            });
           }
 
           // Build and save brand partnership report with competitor flagging
@@ -291,7 +473,26 @@ export async function GET(
           const findings = [...exaFindings, ...socialMediaFindings, ...competitorFindings];
           const riskLevel = calculateRiskLevel(findings);
 
+          // Emit findings for competitor partnerships
+          for (const finding of competitorFindings) {
+            sendEvent('finding_discovered', {
+              creatorId: creator.id,
+              title: finding.title,
+              severity: finding.severity,
+              type: finding.type,
+              source: finding.source.url,
+              timestamp: Date.now(),
+            });
+          }
+
           // Generate comprehensive AI rationale with all analysis data
+          sendEvent('analysis_step', {
+            creatorId: creator.id,
+            step: 'rationale_generation',
+            status: 'started',
+            timestamp: Date.now(),
+          });
+
           const rationale = await generateComprehensiveRationale({
             findings,
             creatorName: creator.name,
@@ -300,6 +501,13 @@ export async function GET(
             brandPartnerships: partnershipReport,
             socialMediaAnalyses,
             aggregatedProfanity,
+          });
+
+          sendEvent('analysis_step', {
+            creatorId: creator.id,
+            step: 'rationale_generation',
+            status: 'completed',
+            timestamp: Date.now(),
           });
 
           // Create report - include all results
@@ -338,6 +546,7 @@ export async function GET(
             brandPartnerships: partnershipReport.totalPartnerships,
             uniqueBrands: partnershipReport.uniqueBrands.length,
             competitorPartnerships: partnershipReport.competitorPartnerships.length,
+            timestamp: Date.now(),
           });
 
           return { success: true };
@@ -359,6 +568,7 @@ export async function GET(
             creatorId: creator.id,
             name: creator.name,
             error: error instanceof Error ? error.message : 'Unknown error',
+            timestamp: Date.now(),
           });
 
           return { failed: true };
@@ -473,6 +683,7 @@ export async function GET(
           batchId,
           status: 'COMPLETED',
           metrics,
+          timestamp: Date.now(),
         });
       } catch (error) {
         console.error('Stream error:', error);

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Play, RotateCcw, Download, Loader2, LayoutGrid, Table as TableIcon } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useBatchStream } from '@/hooks/use-batch-stream';
 import { BatchProgress } from '@/components/batch/batch-progress';
 import { BatchTable } from '@/components/batch/batch-table';
+import { ResearchFeed } from '@/components/batch/research-feed';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
@@ -72,6 +73,7 @@ export default function BatchDetailPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'list'>('table');
+  const [showResearchFeed, setShowResearchFeed] = useState(false);
 
   const t = useTranslations('batchDetail');
   const tBatches = useTranslations('batches');
@@ -107,13 +109,22 @@ export default function BatchDetailPage({
     setIsStarting(true);
     try {
       await fetch(`/api/batches/${batchId}/process`, { method: 'POST' });
-      startStream();
+      setShowResearchFeed(true);
+      // Don't call startStream here - ResearchFeed handles its own streaming
     } catch (err) {
       console.error('Failed to start processing:', err);
     } finally {
       setIsStarting(false);
     }
   };
+
+  const handleResearchComplete = useCallback(() => {
+    // Refetch batch data when research completes
+    fetch(`/api/batches/${batchId}`)
+      .then((res) => res.json())
+      .then((data) => setBatch(data))
+      .catch(console.error);
+  }, [batchId]);
 
   const handleRetry = () => {
     window.location.reload();
@@ -171,7 +182,10 @@ export default function BatchDetailPage({
     ).length;
 
   const canStart =
-    batch.status === 'PENDING' && !isStreaming && !isStarting;
+    batch.status === 'PENDING' && !isStreaming && !isStarting && !showResearchFeed;
+
+  // Show research feed when actively processing or when we just started
+  const shouldShowResearchFeed = showResearchFeed || (batch.status === 'PROCESSING' && !isComplete);
 
   // Calculate creators to review (high/critical risk)
   const reviewCount = batch.creators.filter((c) => {
@@ -201,31 +215,33 @@ export default function BatchDetailPage({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              {/* View toggle */}
-              <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
-                <button
-                  onClick={() => setViewMode('table')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    viewMode === 'table'
-                      ? 'bg-zinc-800 text-zinc-200'
-                      : 'text-zinc-500 hover:text-zinc-400'
-                  )}
-                >
-                  <TableIcon size={16} />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    viewMode === 'list'
-                      ? 'bg-zinc-800 text-zinc-200'
-                      : 'text-zinc-500 hover:text-zinc-400'
-                  )}
-                >
-                  <LayoutGrid size={16} />
-                </button>
-              </div>
+              {/* View toggle - hide when research feed is showing */}
+              {!shouldShowResearchFeed && (
+                <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+                  <button
+                    onClick={() => setViewMode('table')}
+                    className={cn(
+                      'p-1.5 rounded-md transition-colors',
+                      viewMode === 'table'
+                        ? 'bg-zinc-800 text-zinc-200'
+                        : 'text-zinc-500 hover:text-zinc-400'
+                    )}
+                  >
+                    <TableIcon size={16} />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={cn(
+                      'p-1.5 rounded-md transition-colors',
+                      viewMode === 'list'
+                        ? 'bg-zinc-800 text-zinc-200'
+                        : 'text-zinc-500 hover:text-zinc-400'
+                    )}
+                  >
+                    <LayoutGrid size={16} />
+                  </button>
+                </div>
+              )}
 
               {canStart && (
                 <Button onClick={handleStartProcessing} disabled={isStarting} size="sm">
@@ -233,7 +249,7 @@ export default function BatchDetailPage({
                   {isStarting ? t('starting') : t('startResearch')}
                 </Button>
               )}
-              {(batch.status === 'COMPLETED' || completedCount > 0) && (
+              {(batch.status === 'COMPLETED' || completedCount > 0) && !shouldShowResearchFeed && (
                 <Button variant="secondary" onClick={handleExport} size="sm">
                   <Download className="w-4 h-4 mr-2" />
                   {tCommon('export')}
@@ -242,7 +258,8 @@ export default function BatchDetailPage({
             </div>
           </div>
 
-          {(isStreaming || batch.status === 'PROCESSING') && (
+          {/* Show BatchProgress only when not using ResearchFeed (legacy fallback) */}
+          {!shouldShowResearchFeed && (isStreaming || batch.status === 'PROCESSING') && (
             <BatchProgress
               total={batch.creators.length}
               completed={completedCount}
@@ -252,7 +269,7 @@ export default function BatchDetailPage({
           )}
         </div>
 
-        {error && (
+        {error && !shouldShowResearchFeed && (
           <div className="p-4 bg-red-950/30 border border-red-900 rounded-lg mb-6 flex items-center justify-between">
             <p className="text-red-400 text-sm">{error}</p>
             <Button variant="ghost" size="sm" onClick={handleRetry}>
@@ -262,8 +279,17 @@ export default function BatchDetailPage({
           </div>
         )}
 
+        {/* Research Feed View (during processing) */}
+        {shouldShowResearchFeed && (
+          <ResearchFeed
+            batchId={batchId}
+            creators={batch.creators.map(c => ({ id: c.id, name: c.name }))}
+            onComplete={handleResearchComplete}
+          />
+        )}
+
         {/* Table View */}
-        {viewMode === 'table' && (
+        {!shouldShowResearchFeed && viewMode === 'table' && (
           <BatchTable
             creators={batch.creators}
             batchId={batchId}
@@ -272,7 +298,7 @@ export default function BatchDetailPage({
         )}
 
         {/* List View (original) */}
-        {viewMode === 'list' && (
+        {!shouldShowResearchFeed && viewMode === 'list' && (
           <div className="space-y-px">
             {batch.creators.map((creator) => {
               const streamResult = resultsMap.get(creator.id);
@@ -345,7 +371,8 @@ export default function BatchDetailPage({
           </div>
         )}
 
-        {isComplete && (
+        {/* Completion message - only show when not using ResearchFeed (it has its own) */}
+        {!shouldShowResearchFeed && isComplete && (
           <div className="mt-12 text-center">
             <p className="text-zinc-600 text-sm">
               {t('researchComplete')} · {t('processed', { completed: completedCount, total: batch.creators.length })}
