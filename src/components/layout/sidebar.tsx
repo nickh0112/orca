@@ -6,12 +6,7 @@ import { useLocale } from 'next-intl';
 import { cn } from '@/lib/utils';
 import {
   Home,
-  Bell,
-  BarChart3,
   Layers,
-  Calendar,
-  Users,
-  Settings,
   Plus,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -84,35 +79,10 @@ export function Sidebar() {
       match: (path: string) => path === '/',
     },
     {
-      href: `/${locale}/notifications`,
-      icon: <Bell size={18} />,
-      label: 'Notifications',
-      match: (path: string) => path === '/notifications',
-      badge: 3,
-    },
-    {
-      href: `/${locale}/analytics`,
-      icon: <BarChart3 size={18} />,
-      label: 'Analytics',
-      match: (path: string) => path === '/analytics',
-    },
-    {
       href: `/${locale}/batches`,
       icon: <Layers size={18} />,
       label: 'Batches',
       match: (path: string) => path.startsWith('/batches') && path !== '/batches/new',
-    },
-    {
-      href: `/${locale}/calendar`,
-      icon: <Calendar size={18} />,
-      label: 'Calendar',
-      match: (path: string) => path === '/calendar',
-    },
-    {
-      href: `/${locale}/team`,
-      icon: <Users size={18} />,
-      label: 'Team',
-      match: (path: string) => path === '/team',
     },
   ];
 
@@ -154,20 +124,10 @@ export function Sidebar() {
             icon={item.icon}
             label={item.label}
             isActive={item.match(pathnameWithoutLocale)}
-            badge={item.badge}
           />
         ))}
       </nav>
 
-      {/* Bottom section - Settings */}
-      <div className="flex flex-col items-center gap-2 py-4 px-2.5 border-t border-zinc-800/60">
-        <NavItem
-          href={`/${locale}/settings`}
-          icon={<Settings size={18} />}
-          label="Settings"
-          isActive={pathnameWithoutLocale === '/settings'}
-        />
-      </div>
     </aside>
   );
 }
