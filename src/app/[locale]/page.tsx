@@ -152,12 +152,12 @@ export default function DashboardPage() {
       id: batch.id,
       name: batch.name,
       status: batch.status,
-      searchTerms: null,
       userEmail: batch.userEmail,
       clientName: batch.clientName ?? null,
-      createdAt: new Date(batch.createdAt),
-      updatedAt: new Date(batch.createdAt),
+      createdAt: batch.createdAt,  // Keep as string, not Date
       completedAt: null,
+      completedCount: batch.completedCount || (batch.status === 'COMPLETED' ? batch.creatorCount : 0),
+      riskBreakdown: batch.riskBreakdown || { critical: 0, high: 0, medium: 0, low: 0 },
       _count: { creators: batch.creatorCount },
     }));
   }, [stats?.recentBatches]);
