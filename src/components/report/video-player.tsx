@@ -81,6 +81,8 @@ export function VideoPlayer({
   const [activeOverlays, setActiveOverlays] = useState<ActiveOverlay[]>([]);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingSeekRef = useRef<{ time: number; id: number } | null>(null);
+  const canPlayListenerRef = useRef<(() => void) | null>(null);
 
   // Calculate active overlays based on current time
   useEffect(() => {
@@ -124,30 +126,60 @@ export function VideoPlayer({
   }, [currentTime, analysis]);
 
   // Helper to seek with video readiness checks
-  const seekTo = useCallback((time: number) => {
+  const seekTo = useCallback((time: number, requestId: number) => {
     const video = videoRef.current;
     if (!video) return;
 
-    // If video is ready (has metadata), seek immediately
-    if (video.readyState >= 1) {
+    // Store this as the pending seek (cancels any previous pending seek)
+    pendingSeekRef.current = { time, id: requestId };
+
+    // Clean up any existing canplay listener
+    if (canPlayListenerRef.current) {
+      video.removeEventListener('canplay', canPlayListenerRef.current);
+      canPlayListenerRef.current = null;
+    }
+
+    const performSeek = () => {
+      // Only proceed if this is still the active seek request
+      if (pendingSeekRef.current?.id !== requestId) return;
+
       video.currentTime = time;
+      pendingSeekRef.current = null;
+    };
+
+    // If video has enough data (HAVE_FUTURE_DATA or better), seek immediately
+    if (video.readyState >= 3) {
+      performSeek();
       return;
     }
 
-    // Otherwise, wait for loadedmetadata then seek
-    const handleLoaded = () => {
-      video.currentTime = time;
-      video.removeEventListener('loadedmetadata', handleLoaded);
+    // Otherwise wait for canplay event
+    const handleCanPlay = () => {
+      video.removeEventListener('canplay', handleCanPlay);
+      canPlayListenerRef.current = null;
+      performSeek();
     };
-    video.addEventListener('loadedmetadata', handleLoaded);
+
+    canPlayListenerRef.current = handleCanPlay;
+    video.addEventListener('canplay', handleCanPlay);
   }, []);
 
   // Handle external seek requests - depends on ID to always trigger even for same time
   useEffect(() => {
     if (seekRequest) {
-      seekTo(seekRequest.time);
+      seekTo(seekRequest.time, seekRequest.id);
     }
   }, [seekRequest?.id, seekTo]);
+
+  // Cleanup pending seek listeners on unmount
+  useEffect(() => {
+    return () => {
+      const video = videoRef.current;
+      if (video && canPlayListenerRef.current) {
+        video.removeEventListener('canplay', canPlayListenerRef.current);
+      }
+    };
+  }, []);
 
   // Handle external play/pause control
   useEffect(() => {
