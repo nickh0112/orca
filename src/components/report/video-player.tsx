@@ -123,12 +123,31 @@ export function VideoPlayer({
     setActiveOverlays(overlays);
   }, [currentTime, analysis]);
 
+  // Helper to seek with video readiness checks
+  const seekTo = useCallback((time: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // If video is ready (has metadata), seek immediately
+    if (video.readyState >= 1) {
+      video.currentTime = time;
+      return;
+    }
+
+    // Otherwise, wait for loadedmetadata then seek
+    const handleLoaded = () => {
+      video.currentTime = time;
+      video.removeEventListener('loadedmetadata', handleLoaded);
+    };
+    video.addEventListener('loadedmetadata', handleLoaded);
+  }, []);
+
   // Handle external seek requests - depends on ID to always trigger even for same time
   useEffect(() => {
-    if (seekRequest && videoRef.current) {
-      videoRef.current.currentTime = seekRequest.time;
+    if (seekRequest) {
+      seekTo(seekRequest.time);
     }
-  }, [seekRequest?.id]);
+  }, [seekRequest?.id, seekTo]);
 
   // Handle external play/pause control
   useEffect(() => {

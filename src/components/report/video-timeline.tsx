@@ -202,17 +202,20 @@ export function VideoTimeline({
   // Handle marker click
   const handleMarkerClick = useCallback((marker: TimelineMarker, e: React.MouseEvent) => {
     e.stopPropagation();
-    onSeek?.(marker.startTime);
 
-    // If it's a flag marker and we have the callback, find and call with the evidence
+    // If it's a flag marker with a callback, let onFlagClick handle the seek
     if (marker.type === 'flag' && onFlagClick && evidence) {
       const matchingEvidence = evidence.find(
         ev => ev.category === marker.category && ev.timestamp === marker.startTime
       );
       if (matchingEvidence) {
-        onFlagClick(matchingEvidence);
+        onFlagClick(matchingEvidence);  // This triggers handleFlagClick which seeks
+        return;  // Don't also call onSeek
       }
     }
+
+    // For non-flag markers or when no matching evidence, call onSeek directly
+    onSeek?.(marker.startTime);
   }, [onSeek, onFlagClick, evidence]);
 
   // Calculate position percentage
