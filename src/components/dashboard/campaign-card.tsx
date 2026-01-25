@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { Clock, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
-import type { BatchStatus, RiskLevel } from '@/types';
+import type { BatchStatus } from '@/types';
 
 interface CampaignCardProps {
   id: string;
@@ -61,18 +61,8 @@ export function CampaignCard({
   className,
 }: CampaignCardProps) {
   const locale = useLocale();
-  const progress = creatorCount > 0 ? (completedCount / creatorCount) * 100 : 0;
   const total = riskBreakdown.critical + riskBreakdown.high + riskBreakdown.medium + riskBreakdown.low;
   const highRiskCount = riskBreakdown.critical + riskBreakdown.high;
-
-  // Determine primary color based on dominant risk
-  const getProgressColor = () => {
-    if (status !== 'COMPLETED') return 'bg-blue-500';
-    if (riskBreakdown.critical > 0) return 'bg-red-500';
-    if (riskBreakdown.high > 0) return 'bg-orange-500';
-    if (riskBreakdown.medium > 0) return 'bg-amber-500';
-    return 'bg-emerald-500';
-  };
 
   return (
     <Link href={`/${locale}/batches/${id}`}>
@@ -99,20 +89,6 @@ export function CampaignCard({
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="relative h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
-          <div
-            className={cn('absolute inset-y-0 left-0 rounded-full transition-all duration-500', getProgressColor())}
-            style={{ width: `${progress}%` }}
-          />
-          {status === 'PROCESSING' && (
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"
-              style={{ width: `${progress}%` }}
-            />
-          )}
-        </div>
-
         {/* Stats */}
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-3">
@@ -130,35 +106,37 @@ export function CampaignCard({
           </span>
         </div>
 
-        {/* Risk mini-bar for completed */}
-        {status === 'COMPLETED' && total > 0 && (
-          <div className="flex gap-0.5 mt-3 h-1 rounded-full overflow-hidden">
-            {riskBreakdown.critical > 0 && (
-              <div
-                className="bg-red-500"
-                style={{ width: `${(riskBreakdown.critical / total) * 100}%` }}
-              />
-            )}
-            {riskBreakdown.high > 0 && (
-              <div
-                className="bg-orange-500"
-                style={{ width: `${(riskBreakdown.high / total) * 100}%` }}
-              />
-            )}
-            {riskBreakdown.medium > 0 && (
-              <div
-                className="bg-amber-500"
-                style={{ width: `${(riskBreakdown.medium / total) * 100}%` }}
-              />
-            )}
-            {riskBreakdown.low > 0 && (
-              <div
-                className="bg-emerald-500"
-                style={{ width: `${(riskBreakdown.low / total) * 100}%` }}
-              />
-            )}
-          </div>
-        )}
+        {/* Risk breakdown bar */}
+        <div className="flex gap-0.5 mt-3 h-1.5 rounded-full overflow-hidden bg-zinc-800">
+          {total > 0 ? (
+            <>
+              {riskBreakdown.critical > 0 && (
+                <div
+                  className="bg-red-500"
+                  style={{ width: `${(riskBreakdown.critical / total) * 100}%` }}
+                />
+              )}
+              {riskBreakdown.high > 0 && (
+                <div
+                  className="bg-orange-500"
+                  style={{ width: `${(riskBreakdown.high / total) * 100}%` }}
+                />
+              )}
+              {riskBreakdown.medium > 0 && (
+                <div
+                  className="bg-amber-500"
+                  style={{ width: `${(riskBreakdown.medium / total) * 100}%` }}
+                />
+              )}
+              {riskBreakdown.low > 0 && (
+                <div
+                  className="bg-emerald-500"
+                  style={{ width: `${(riskBreakdown.low / total) * 100}%` }}
+                />
+              )}
+            </>
+          ) : null}
+        </div>
       </div>
     </Link>
   );
