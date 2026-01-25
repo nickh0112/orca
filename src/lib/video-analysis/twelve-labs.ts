@@ -1489,67 +1489,54 @@ export async function analyzeVideoWithOptions(
       };
     }
 
-    // For light/standard tiers, use separate calls as needed
-    const analysisPromises: Promise<unknown>[] = [
+    // For light/standard tiers, also use comprehensive analysis to get SafetyRationale with categoryScores
+    // This ensures Safety Score Breakdown works for all video tiers (same API cost as before)
+    console.log('[Twelve Labs] Using comprehensive analysis for consistent safety scoring...');
+    const [transcript, comprehensive] = await Promise.all([
       transcriptPromise,
+      analyzeComprehensive(indexId, indexResult.videoId),
+    ]);
 
-      // Visual analysis (always run)
-      (async () => {
-        console.log('[Twelve Labs] Analyzing visual content...');
-        const result = await analyzeForBrandSafety(indexId, indexResult.videoId);
-        console.log(
-          `[Twelve Labs] Visual analysis complete: ${result.brands.length} brands, ` +
-            `${result.actions.length} actions, safety: ${result.brandSafetyRating}`
-        );
-        return result;
-      })(),
+    visualAnalysis = comprehensive.visualAnalysis;
+    logoDetections = comprehensive.logoDetections;
+    contentClassification = comprehensive.contentClassification;
 
-      // Logo detection (optional - for standard tier)
-      skipLogoDetection
-        ? Promise.resolve([] as LogoDetection[])
-        : (async () => {
-            try {
-              return await detectAllLogos(indexId, indexResult.videoId);
-            } catch (error) {
-              console.error('[Twelve Labs] Logo detection failed:', error);
-              return [] as LogoDetection[];
-            }
-          })(),
-
-      // Content classification (skipped for light/standard)
-      Promise.resolve({ labels: [], overallSafetyScore: 0.5 } as ContentClassification),
-    ];
-
-    const [transcriptResult, visualAnalysisResult, logoDetectionsResult, contentClassificationResult] =
-      (await Promise.all(analysisPromises)) as [
-        TwelveLabsTranscript,
-        VisualAnalysis,
-        LogoDetection[],
-        ContentClassification
-      ];
+    console.log(
+      `[Twelve Labs] Comprehensive analysis complete: ${visualAnalysis.brands.length} brands, ` +
+        `${logoDetections.length} logo detections, safety: ${visualAnalysis.brandSafetyRating}`
+    );
 
     // Merge logo detections with visual analysis brands
-    const logoBrands = convertLogosToBrands(logoDetectionsResult);
-    const mergedBrands = mergeBrandDetections(visualAnalysisResult.brands, logoBrands);
+    const logoBrands = convertLogosToBrands(logoDetections);
+    const mergedBrands = mergeBrandDetections(visualAnalysis.brands, logoBrands);
 
-    // Create enhanced visual analysis with merged brands
+    // Populate coverage stats from transcript and index info
+    const transcriptWordCount = transcript.text.split(/\s+/).filter(w => w.length > 0).length;
+    if (visualAnalysis.safetyRationale) {
+      visualAnalysis.safetyRationale.coverageStats = {
+        videoDuration: indexResult.duration || 0,
+        transcriptWords: transcriptWordCount,
+        framesAnalyzed: Math.floor((indexResult.duration || 0) * 1), // ~1 fps for analysis
+      };
+    }
+
     const enhancedVisualAnalysis: VisualAnalysis = {
-      ...visualAnalysisResult,
+      ...visualAnalysis,
       brands: mergedBrands,
     };
 
     console.log(
       `[Twelve Labs] Analysis complete: ${mergedBrands.length} total brands, ` +
-        `${logoDetectionsResult.length} logo detections, ` +
-        `safety score: ${contentClassificationResult.overallSafetyScore.toFixed(2)}`
+        `${logoDetections.length} logo detections, ` +
+        `safety score: ${contentClassification.overallSafetyScore.toFixed(2)}`
     );
 
     return {
-      transcript: transcriptResult,
+      transcript,
       visualAnalysis: enhancedVisualAnalysis,
       indexInfo: indexResult,
-      logoDetections: logoDetectionsResult,
-      contentClassification: contentClassificationResult,
+      logoDetections,
+      contentClassification,
     };
   } catch (error) {
     console.error('[Twelve Labs] Video analysis error:', error);

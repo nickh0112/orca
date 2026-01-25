@@ -6,7 +6,7 @@ import {
   calculateRiskLevel,
   generateSummary,
 } from '@/lib/search-queries';
-import { validateResults, generateRationale } from '@/lib/result-validator';
+import { validateResults, generateComprehensiveRationale } from '@/lib/result-validator';
 import {
   fetchAllSocialMedia,
   analyzeSocialMediaContent,
@@ -291,13 +291,16 @@ export async function GET(
           const findings = [...exaFindings, ...socialMediaFindings, ...competitorFindings];
           const riskLevel = calculateRiskLevel(findings);
 
-          // Generate AI rationale summary (use creator's language setting)
-          const rationale = await generateRationale(
+          // Generate comprehensive AI rationale with all analysis data
+          const rationale = await generateComprehensiveRationale({
             findings,
-            creator.name,
+            creatorName: creator.name,
             socialLinks,
-            creator.language || 'en'
-          );
+            language: creator.language || 'en',
+            brandPartnerships: partnershipReport,
+            socialMediaAnalyses,
+            aggregatedProfanity,
+          });
 
           // Create report - include all results
           await db.report.create({

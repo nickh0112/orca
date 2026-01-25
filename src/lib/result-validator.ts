@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ExaResult } from './exa';
 import type { Finding } from '@/types';
+import type { BrandPartnershipReport, SocialMediaAnalysis } from '@/types/social-media';
 import { extractUsername } from './utils';
 
 const anthropic = new Anthropic({
@@ -417,5 +418,187 @@ ${uncertainCount > 0 ? `- ${uncertainCount} finding(s) have uncertain person mat
 
 ## ${headings.recommendation}
 ${criticalCount > 0 ? 'Proceed with significant caution - critical issues present.' : highCount > 0 ? 'Recommend further review before proceeding.' : 'Lower risk profile - standard review recommended.'}`;
+  }
+}
+
+/**
+ * Input for comprehensive rationale generation
+ */
+export interface ComprehensiveRationaleInput {
+  findings: Finding[];
+  creatorName: string;
+  socialLinks: string[];
+  language: string;
+  brandPartnerships?: BrandPartnershipReport;
+  socialMediaAnalyses?: SocialMediaAnalysis[];
+  aggregatedProfanity?: {
+    hasProfanity: boolean;
+    maxSeverity: number;
+    matches: Array<{ word: string; severity: number; category: string }>;
+    categories: string[];
+  };
+}
+
+/**
+ * Generate comprehensive AI rationale that incorporates all analysis data
+ * Uses Claude Sonnet for better synthesis of multi-modal data
+ */
+export async function generateComprehensiveRationale(
+  input: ComprehensiveRationaleInput
+): Promise<string> {
+  const {
+    findings,
+    creatorName,
+    socialLinks,
+    language,
+    brandPartnerships,
+    socialMediaAnalyses,
+    aggregatedProfanity,
+  } = input;
+
+  const isGerman = language === 'de';
+
+  // If no data to analyze, return a simple clean report
+  if (
+    findings.length === 0 &&
+    (!brandPartnerships || brandPartnerships.totalPartnerships === 0) &&
+    (!aggregatedProfanity || !aggregatedProfanity.hasProfanity)
+  ) {
+    return isGerman
+      ? 'Für diesen Creator wurden keine signifikanten Markenrisiken identifiziert. Die Analyse von Web-Recherche, Social-Media-Inhalten und visueller Analyse ergab keine relevanten Bedenken.'
+      : 'No significant brand safety concerns were identified for this creator. Analysis of web research, social media content, and visual analysis revealed no relevant concerns.';
+  }
+
+  const handlesStr = socialLinks
+    .map(h => extractUsername(h))
+    .filter(Boolean)
+    .join(', ');
+
+  // Build findings summary
+  const findingsSummary = findings.length > 0
+    ? findings.slice(0, 10).map((f, i) => {
+        const confidence = f.validation?.confidence || 'unknown';
+        const match = f.validation?.isSamePerson || 'unknown';
+        return `${i + 1}. [${f.severity.toUpperCase()}] ${f.title}
+   - Type: ${f.type}
+   - Summary: ${f.summary.slice(0, 200)}
+   - Confidence: ${confidence}, Person Match: ${match}`;
+      }).join('\n\n')
+    : 'No web research findings.';
+
+  // Build brand partnerships section
+  let partnershipSection = '';
+  if (brandPartnerships && brandPartnerships.totalPartnerships > 0) {
+    const competitorCount = brandPartnerships.competitorPartnerships.length;
+    const recentPartners = brandPartnerships.timeline.slice(0, 5);
+
+    partnershipSection = `
+BRAND PARTNERSHIPS (${brandPartnerships.totalPartnerships} total, ${brandPartnerships.uniqueBrands.length} unique brands):
+${competitorCount > 0 ? `⚠️ COMPETITOR PARTNERSHIPS: ${competitorCount} detected!\n${brandPartnerships.competitorPartnerships.slice(0, 3).map(p => `  - ${p.brand} (${p.partnershipType}) on ${p.platform}`).join('\n')}` : ''}
+Recent partnerships:
+${recentPartners.map(p => `  - ${p.brand} (${p.partnershipType}) - ${new Date(p.postDate).toLocaleDateString()} on ${p.platform}`).join('\n')}`;
+  }
+
+  // Build content safety section from social media analyses
+  let contentSafetySection = '';
+  if (socialMediaAnalyses && socialMediaAnalyses.length > 0) {
+    const flaggedPosts = socialMediaAnalyses.flatMap(a => a.flaggedPosts);
+    const highSeverityCount = flaggedPosts.filter(p => p.severity === 'high' || p.severity === 'critical').length;
+    const platformSummaries = socialMediaAnalyses
+      .filter(a => a.flaggedPosts.length > 0)
+      .map(a => `  - ${a.platform}: ${a.flaggedPosts.length} flagged posts (${a.overallRisk} risk) - ${a.summary.slice(0, 100)}...`);
+
+    if (platformSummaries.length > 0) {
+      contentSafetySection = `
+CONTENT SAFETY FLAGS (${flaggedPosts.length} posts flagged, ${highSeverityCount} high/critical):
+${platformSummaries.join('\n')}`;
+    }
+  }
+
+  // Build profanity section
+  let profanitySection = '';
+  if (aggregatedProfanity && aggregatedProfanity.hasProfanity) {
+    const uniqueWords = [...new Set(aggregatedProfanity.matches.map(m => m.word))];
+    profanitySection = `
+PROFANITY DETECTION:
+- Detected: Yes (${aggregatedProfanity.matches.length} instances)
+- Max Severity: ${aggregatedProfanity.maxSeverity}/5
+- Categories: ${aggregatedProfanity.categories.join(', ')}
+- Sample words: ${uniqueWords.slice(0, 5).join(', ')}${uniqueWords.length > 5 ? '...' : ''}`;
+  }
+
+  const languageInstruction = isGerman
+    ? 'WICHTIG: Antworte vollständig auf Deutsch.\n\n'
+    : '';
+
+  const headings = isGerman
+    ? {
+        summary: 'Zusammenfassung',
+        concerns: 'Hauptbedenken',
+        partnerships: 'Markenpartnerschaften',
+        content: 'Inhaltssicherheit',
+        notes: 'Vertrauenshinweise',
+        recommendation: 'Empfehlung'
+      }
+    : {
+        summary: 'Summary',
+        concerns: 'Key Concerns',
+        partnerships: 'Brand Partnerships',
+        content: 'Content Safety',
+        notes: 'Confidence Notes',
+        recommendation: 'Recommendation'
+      };
+
+  const prompt = `${languageInstruction}You are a senior brand safety analyst providing a comprehensive evaluation for potential creator partnership.
+
+CREATOR INFO:
+- Name: ${creatorName}
+- Social handles: ${handlesStr || 'Not provided'}
+
+=== WEB RESEARCH FINDINGS (${findings.length} total) ===
+${findingsSummary}
+${partnershipSection}
+${contentSafetySection}
+${profanitySection}
+
+Please provide a comprehensive analysis in this exact format:
+
+## ${headings.summary}
+[3-4 sentences providing an executive summary of the creator's brand safety profile. Include key metrics: number of partnerships, any competitor relationships, content safety flags, and overall risk assessment.]
+
+## ${headings.concerns}
+[Bullet points of the most significant issues. Prioritize: competitor partnerships, high-severity content flags, profanity concerns, and web research findings. Be specific about evidence.]
+
+## ${headings.partnerships}
+[Brief assessment of the creator's brand partnership history. Note any patterns, brand categories they work with, and any competitor relationships that could impact exclusivity.]
+
+## ${headings.content}
+[Summary of content safety analysis across platforms. Note any patterns in flagged content, severity levels, and specific concerns from visual/audio analysis.]
+
+## ${headings.notes}
+[Flag any findings that may be about a different person, seem low confidence, or need manual verification. Be specific.]
+
+## ${headings.recommendation}
+[2-3 sentences with clear recommendation: proceed, proceed with caution, or do not recommend. Justify based on the evidence above.]`;
+
+  try {
+    const response = await withRetry(async () => {
+      return await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514', // Use Sonnet for better synthesis
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      });
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type');
+    }
+
+    return content.text;
+  } catch (error) {
+    console.error('Comprehensive rationale generation failed after retries:', error);
+    // Fall back to basic generateRationale
+    return generateRationale(findings, creatorName, socialLinks, language);
   }
 }
