@@ -6,11 +6,10 @@ import { User, UsersRound, Plus, TrendingUp, TrendingDown, Minus } from 'lucide-
 import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
 import { BrandSafetyTrendChart } from '@/components/dashboard/brand-safety-trend-chart';
-import { CampaignCard } from '@/components/dashboard/campaign-card';
-import { ActivityFeed } from '@/components/dashboard/activity-feed';
+import { BatchesTable } from '@/components/dashboard/batches-table';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
-import type { BatchStatus, RiskLevel } from '@/types';
+import type { BatchStatus } from '@/types';
 
 interface DashboardStats {
   summary: {
@@ -111,7 +110,6 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('team');
   const { email, hasEmail } = useUserEmail();
   const t = useTranslations('dashboard');
-  const tRisk = useTranslations('risk');
   const locale = useLocale();
 
   useEffect(() => {
@@ -146,19 +144,17 @@ export default function DashboardPage() {
     }));
   }, [stats?.activityTrend]);
 
-  // Generate activity feed items from recent activity
-  const activityItems = useMemo(() => {
+  // Transform data for BatchesTable
+  const batchesForTable = useMemo(() => {
     if (!stats?.recentBatches) return [];
 
-    return stats.recentBatches.slice(0, 8).map((batch, index) => ({
-      id: `activity-${batch.id}-${index}`,
-      type: batch.status === 'COMPLETED' ? 'batch_completed' as const :
-            batch.status === 'PROCESSING' ? 'batch_started' as const :
-            'creator_checked' as const,
-      batchId: batch.id,
-      batchName: batch.name,
-      userEmail: batch.userEmail || undefined,
-      timestamp: batch.createdAt,
+    return stats.recentBatches.slice(0, 8).map((batch) => ({
+      ...batch,
+      userEmail: batch.userEmail,
+      completedAt: null,
+      completedCount: batch.completedCount || (batch.status === 'COMPLETED' ? batch.creatorCount : 0),
+      riskBreakdown: batch.riskBreakdown || { critical: 0, high: 0, medium: 0, low: 0 },
+      _count: { creators: batch.creatorCount },
     }));
   }, [stats?.recentBatches]);
 
@@ -232,90 +228,63 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Main Grid Layout */}
-        <div className="grid grid-cols-[1fr,320px] gap-6 h-[calc(100vh-140px)]">
-          {/* Left Column - Main Content */}
-          <div className="space-y-6 overflow-auto pr-2">
-            {/* Stats Row */}
-            <div className="grid grid-cols-4 gap-4">
-              <StatCard
-                label={t('creatorsVetted')}
-                value={stats.summary.totalCreators}
-                trend="up"
-                trendLabel="+12%"
-              />
-              <StatCard
-                label={t('batchesThisMonth')}
-                value={stats.summary.batchesThisMonth}
-                trend="neutral"
-                trendLabel="same"
-              />
-              <StatCard
-                label={t('avgRiskLevel')}
-                value={riskInfo?.label || '—'}
-                color={riskInfo?.color || 'default'}
-              />
-              <StatCard
-                label={t('successRate')}
-                value={`${stats.summary.successRate}%`}
-                trend={stats.summary.successRate >= 90 ? 'up' : stats.summary.successRate >= 70 ? 'neutral' : 'down'}
-                trendLabel={stats.summary.successRate >= 90 ? 'great' : stats.summary.successRate >= 70 ? 'ok' : 'low'}
-                color={stats.summary.successRate >= 90 ? 'success' : stats.summary.successRate >= 70 ? 'warning' : 'danger'}
-              />
-            </div>
-
-            {/* Trend Chart */}
-            <BrandSafetyTrendChart data={trendChartData} />
-
-            {/* Active Campaigns */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-zinc-300 text-sm font-medium">Active Campaigns</h2>
-                <Link
-                  href={`/${locale}/batches`}
-                  className="text-zinc-500 hover:text-zinc-400 text-xs transition-colors"
-                >
-                  View all →
-                </Link>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                {stats.recentBatches.slice(0, 6).map((batch) => (
-                  <CampaignCard
-                    key={batch.id}
-                    id={batch.id}
-                    name={batch.name}
-                    clientName={batch.clientName}
-                    status={batch.status}
-                    creatorCount={batch.creatorCount}
-                    completedCount={batch.completedCount || (batch.status === 'COMPLETED' ? batch.creatorCount : 0)}
-                    riskBreakdown={batch.riskBreakdown || {
-                      critical: Math.floor(stats.riskDistribution.CRITICAL * (batch.creatorCount / stats.summary.totalCreators)),
-                      high: Math.floor(stats.riskDistribution.HIGH * (batch.creatorCount / stats.summary.totalCreators)),
-                      medium: Math.floor(stats.riskDistribution.MEDIUM * (batch.creatorCount / stats.summary.totalCreators)),
-                      low: Math.floor(stats.riskDistribution.LOW * (batch.creatorCount / stats.summary.totalCreators)),
-                    }}
-                    createdAt={batch.createdAt}
-                  />
-                ))}
-              </div>
-
-              {stats.recentBatches.length === 0 && (
-                <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-xl p-12 text-center">
-                  <p className="text-zinc-500 text-sm mb-3">{t('noBatches')}</p>
-                  <Link
-                    href={`/${locale}/batches/new`}
-                    className="text-zinc-400 hover:text-zinc-300 text-sm transition-colors"
-                  >
-                    {t('createNewBatch')} →
-                  </Link>
-                </div>
-              )}
-            </div>
+        {/* Main Content */}
+        <div className="space-y-6">
+          {/* Stats Row */}
+          <div className="grid grid-cols-4 gap-4">
+            <StatCard
+              label={t('creatorsVetted')}
+              value={stats.summary.totalCreators}
+              trend="up"
+              trendLabel="+12%"
+            />
+            <StatCard
+              label={t('batchesThisMonth')}
+              value={stats.summary.batchesThisMonth}
+              trend="neutral"
+              trendLabel="same"
+            />
+            <StatCard
+              label={t('avgRiskLevel')}
+              value={riskInfo?.label || '—'}
+              color={riskInfo?.color || 'default'}
+            />
+            <StatCard
+              label={t('successRate')}
+              value={`${stats.summary.successRate}%`}
+              trend={stats.summary.successRate >= 90 ? 'up' : stats.summary.successRate >= 70 ? 'neutral' : 'down'}
+              trendLabel={stats.summary.successRate >= 90 ? 'great' : stats.summary.successRate >= 70 ? 'ok' : 'low'}
+              color={stats.summary.successRate >= 90 ? 'success' : stats.summary.successRate >= 70 ? 'warning' : 'danger'}
+            />
           </div>
 
-          {/* Right Column - Activity Feed */}
-          <div className="overflow-auto">
-            <ActivityFeed items={activityItems} />
+          {/* Trend Chart */}
+          <BrandSafetyTrendChart data={trendChartData} />
+
+          {/* Active Campaigns */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-zinc-300 text-sm font-medium">Active Campaigns</h2>
+              <Link
+                href={`/${locale}/batches`}
+                className="text-zinc-500 hover:text-zinc-400 text-xs transition-colors"
+              >
+                View all →
+              </Link>
+            </div>
+            {batchesForTable.length > 0 ? (
+              <BatchesTable batches={batchesForTable} />
+            ) : (
+              <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-xl p-12 text-center">
+                <p className="text-zinc-500 text-sm mb-3">{t('noBatches')}</p>
+                <Link
+                  href={`/${locale}/batches/new`}
+                  className="text-zinc-400 hover:text-zinc-300 text-sm transition-colors"
+                >
+                  {t('createNewBatch')} →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
