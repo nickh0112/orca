@@ -55,7 +55,8 @@ export interface SocialMediaPost {
     views?: number;
     shares?: number;
   };
-  mediaUrl?: string;       // Direct image/video URL
+  mediaUrl?: string;       // Direct image/video URL (expires - CDN URL)
+  storedMediaUrl?: string; // Persistent blob URL (stored locally)
   thumbnailUrl?: string;   // Thumbnail for videos
   mediaType?: MediaType;
   visualAnalysis?: VisualAnalysis;  // Twelve Labs visual analysis (brands, actions, text, scene context)

@@ -137,6 +137,7 @@ export interface Finding {
       shares?: number;
     };
     mediaUrl?: string;
+    storedMediaUrl?: string;  // Persistent blob URL (for reliable video seeking)
     thumbnailUrl?: string;
     mediaType?: 'image' | 'video' | 'carousel';
     visualAnalysis?: VisualAnalysisData;

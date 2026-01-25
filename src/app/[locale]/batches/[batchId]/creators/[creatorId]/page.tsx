@@ -548,7 +548,11 @@ export default function CreatorReportPage({
                 {/* Video Player (for video content) */}
                 {selectedFinding.socialMediaSource?.mediaType === 'video' ? (
                   <VideoPlayer
-                    src={getProxiedMediaUrl(selectedFinding.socialMediaSource.mediaUrl)}
+                    src={
+                      // Prefer stored URL (persistent blob) over CDN URL (expires)
+                      selectedFinding.socialMediaSource.storedMediaUrl ||
+                      getProxiedMediaUrl(selectedFinding.socialMediaSource.mediaUrl)
+                    }
                     poster={getProxiedMediaUrl(selectedFinding.socialMediaSource.thumbnailUrl)}
                     analysis={selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData}
                     fallbackUrl={selectedFinding.source.url}

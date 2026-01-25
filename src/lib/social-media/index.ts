@@ -22,6 +22,7 @@ import {
   MediaType,
   MediaAnalysisResult,
 } from '@/lib/video-analysis';
+import { storeVideo, isBlobStorageConfigured } from '@/lib/storage/video-storage';
 
 export { fetchInstagram } from './instagram';
 export { fetchTikTok } from './tiktok';
@@ -133,6 +134,10 @@ async function enrichWithMediaAnalysis(
     contentType?: string;
   }> = [];
 
+  // Track stored video URLs for each post
+  const storedVideoUrls = new Map<string, string>();
+  const blobStorageAvailable = isBlobStorageConfigured();
+
   const postsWithMedia = posts.filter((p) => p.mediaUrl);
 
   for (const post of postsWithMedia) {
@@ -156,6 +161,18 @@ async function enrichWithMediaAnalysis(
           const videoData = await downloadVideo(post.mediaUrl!);
           buffer = videoData?.buffer;
           contentType = videoData?.contentType;
+
+          // Store video in Vercel Blob for persistent access
+          if (buffer && blobStorageAvailable) {
+            try {
+              const filename = `videos/${post.id}.mp4`;
+              const storedUrl = await storeVideo(buffer, filename, contentType || 'video/mp4');
+              storedVideoUrls.set(post.id, storedUrl);
+              console.log(`[Blob Storage] Stored video for ${post.id}: ${storedUrl.slice(0, 60)}...`);
+            } catch (blobError) {
+              console.warn(`[Blob Storage] Failed to store ${post.id}:`, blobError);
+            }
+          }
         } catch (error) {
           console.warn(`[Media Analysis] Failed to download ${post.id}:`, error);
         }
@@ -207,10 +224,13 @@ async function enrichWithMediaAnalysis(
   // Merge results back into posts with full Twelve Labs data
   const enrichedPosts = posts.map((post) => {
     const result = results.get(post.id);
-    if (!result) return post;
+    const storedUrl = storedVideoUrls.get(post.id);
+
+    // If no analysis result but we have a stored URL, still add it
+    if (!result && !storedUrl) return post;
 
     // Extend visualAnalysis with full Twelve Labs data
-    const extendedVisualAnalysis = {
+    const extendedVisualAnalysis = result ? {
       ...result.visualAnalysis,
       // Preserve logo detections with timestamps and prominence
       logoDetections: result.logoDetections,
@@ -220,15 +240,17 @@ async function enrichWithMediaAnalysis(
       transcriptSegments: result.transcript?.segments,
       // Preserve video duration from index info
       videoDuration: result.indexInfo?.duration,
-    };
+    } : undefined;
 
     const enriched: SocialMediaPost & { visualAnalysis?: unknown } = {
       ...post,
-      visualAnalysis: extendedVisualAnalysis,
+      visualAnalysis: extendedVisualAnalysis || (post as SocialMediaPost & { visualAnalysis?: unknown }).visualAnalysis,
+      // Add stored video URL for persistent access (fixes seeking issues)
+      storedMediaUrl: storedUrl || post.storedMediaUrl,
     };
 
     // Add transcript for videos
-    if (result.transcript?.text) {
+    if (result?.transcript?.text) {
       enriched.transcript = result.transcript.text || post.transcript;
     }
 
