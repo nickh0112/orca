@@ -116,6 +116,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 40,
+    paddingBottom: 60, // Space for fixed footer
   },
   section: {
     marginBottom: 28,
@@ -436,6 +437,87 @@ const severityColors: Record<string, { bg: string; text: string }> = {
   critical: { bg: '#fecaca', text: '#991b1b' },
 };
 
+// Clean web scraping artifacts from text
+function sanitizeScrapedText(text: string): string {
+  return text
+    // Remove markdown links but keep text: [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove standalone brackets with content: [Skip to Content] -> Skip to Content
+    .replace(/\[([^\]]+)\]/g, '$1')
+    // Remove repeated navigation items
+    .replace(/(\b(Home|News|Sign In|Subscribe|Skip to \w+|Menu)\b\s*)+/gi, '')
+    // Remove HTML entities
+    .replace(/&#\d+;/g, '')
+    // Clean up multiple spaces/newlines
+    .replace(/\s+/g, ' ')
+    // Remove leading/trailing whitespace
+    .trim();
+}
+
+// Parse markdown bold/italic for display
+function parseMarkdownText(text: string): Array<{ text: string; bold?: boolean }> {
+  const parts: Array<{ text: string; bold?: boolean }> = [];
+  const regex = /\*\*([^*]+)\*\*/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ text: match[1], bold: true });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex) });
+  }
+
+  return parts.length > 0 ? parts : [{ text }];
+}
+
+// Format ISO date string to readable format
+function formatSourceDate(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+// Parse social URL to display format
+function formatSocialLink(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const host = urlObj.hostname.replace('www.', '');
+
+    if (host.includes('instagram.com')) {
+      const handle = urlObj.pathname.split('/').filter(Boolean)[0];
+      return handle ? `@${handle}` : url;
+    }
+    if (host.includes('tiktok.com')) {
+      const handle = urlObj.pathname.split('/').filter(Boolean)[0];
+      return handle ? `${handle}` : url;
+    }
+    if (host.includes('youtube.com')) {
+      const handle = urlObj.pathname.split('/').filter(Boolean).pop();
+      return handle ? `YouTube: ${handle}` : url;
+    }
+    if (host.includes('twitter.com') || host.includes('x.com')) {
+      const handle = urlObj.pathname.split('/').filter(Boolean)[0];
+      return handle ? `@${handle}` : url;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 interface CreatorPdfProps {
   creatorName: string;
   batchName: string;
@@ -580,23 +662,60 @@ function SafetyScoreBreakdown({ classification, brandSafetyRating }: { classific
 }
 
 // Transcript Excerpts Component
-function TranscriptExcerpts({ segments, brands = [] }: { segments: TranscriptSegment[]; brands?: string[] }) {
-  // Get key excerpts (first few and any with brand mentions)
-  const keyExcerpts = segments.slice(0, 5);
+function TranscriptExcerpts({ segments, brands = [], showHeading = false }: { segments: TranscriptSegment[]; brands?: string[]; showHeading?: boolean }) {
+  // Aggregate consecutive short segments into sentences
+  const aggregatedSegments: TranscriptSegment[] = [];
+  let currentSegment: TranscriptSegment | null = null;
+
+  for (const segment of segments) {
+    // Skip very short segments (single words) - aggregate them
+    if (currentSegment !== null && segment.start - currentSegment.end < 0.5) {
+      // Append to current segment
+      currentSegment = {
+        start: currentSegment.start,
+        end: segment.end,
+        text: currentSegment.text + ' ' + segment.text,
+      };
+    } else {
+      // Start new segment
+      if (currentSegment !== null && currentSegment.text.split(' ').length >= 3) {
+        aggregatedSegments.push(currentSegment);
+      }
+      currentSegment = { start: segment.start, end: segment.end, text: segment.text };
+    }
+  }
+
+  // Add last segment if substantial
+  if (currentSegment !== null && currentSegment.text.split(' ').length >= 3) {
+    aggregatedSegments.push(currentSegment);
+  }
+
+  // Get key excerpts (first 5 meaningful segments)
+  const keyExcerpts = aggregatedSegments.slice(0, 5);
+
+  // If no meaningful excerpts, don't show the section
+  if (keyExcerpts.length === 0) {
+    return null;
+  }
 
   return (
-    <View style={styles.transcriptContainer}>
-      {keyExcerpts.map((segment, i) => (
-        <View key={i} style={styles.transcriptSegment}>
-          <Text style={styles.transcriptTimestamp}>{formatDuration(segment.start)}</Text>
-          <Text style={styles.transcriptText}>{segment.text}</Text>
-        </View>
-      ))}
-      {segments.length > 5 && (
-        <Text style={{ fontSize: 9, color: WHALAR.mediumGray, marginTop: 4 }}>
-          ... {segments.length - 5} more segments
-        </Text>
+    <View>
+      {showHeading && (
+        <Text style={styles.analysisHeading}>Key Transcript Excerpts</Text>
       )}
+      <View style={styles.transcriptContainer}>
+        {keyExcerpts.map((segment, i) => (
+          <View key={i} style={styles.transcriptSegment}>
+            <Text style={styles.transcriptTimestamp}>{formatDuration(segment.start)}</Text>
+            <Text style={styles.transcriptText}>{segment.text}</Text>
+          </View>
+        ))}
+        {aggregatedSegments.length > 5 && (
+          <Text style={{ fontSize: 9, color: WHALAR.mediumGray, marginTop: 4 }}>
+            ... {aggregatedSegments.length - 5} more excerpts
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -831,7 +950,7 @@ function CreatorPdfDocument({
           {/* AI Analysis */}
           {summary && (
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeader} minPresenceAhead={100}>
                 <Text style={styles.sectionTitle}>AI Analysis</Text>
               </View>
               {summary.split('\n').map((line, i) => {
@@ -842,17 +961,29 @@ function CreatorPdfDocument({
                     </Text>
                   );
                 }
-                if (line.startsWith('- ')) {
+                if (line.startsWith('- ') || line.startsWith('• ')) {
+                  const bulletText = line.replace(/^[-•]\s*/, '');
+                  const parts = parseMarkdownText(bulletText);
                   return (
                     <Text key={i} style={styles.analysisBullet}>
-                      • {line.replace('- ', '')}
+                      {'• '}
+                      {parts.map((part, j) =>
+                        part.bold
+                          ? <Text key={j} style={{ fontWeight: 'bold' }}>{part.text}</Text>
+                          : part.text
+                      )}
                     </Text>
                   );
                 }
                 if (line.trim()) {
+                  const parts = parseMarkdownText(line);
                   return (
                     <Text key={i} style={styles.analysisText}>
-                      {line}
+                      {parts.map((part, j) =>
+                        part.bold
+                          ? <Text key={j} style={{ fontWeight: 'bold' }}>{part.text}</Text>
+                          : part.text
+                      )}
                     </Text>
                   );
                 }
@@ -864,7 +995,7 @@ function CreatorPdfDocument({
           {/* Video Insights Section (new) */}
           {aggregatedVideoAnalysis && (
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeader} minPresenceAhead={100}>
                 <Text style={styles.sectionTitle}>Video Analysis Insights</Text>
               </View>
 
@@ -894,28 +1025,26 @@ function CreatorPdfDocument({
                 </View>
               )}
 
-              {/* Key Transcript Excerpts */}
+              {/* Key Transcript Excerpts - only shows if there are meaningful aggregated excerpts */}
               {aggregatedVideoAnalysis.transcriptSegments && aggregatedVideoAnalysis.transcriptSegments.length > 0 && (
-                <View>
-                  <Text style={styles.analysisHeading}>Key Transcript Excerpts</Text>
-                  <TranscriptExcerpts
-                    segments={aggregatedVideoAnalysis.transcriptSegments}
-                    brands={aggregatedVideoAnalysis.logoDetections?.map(l => l.brand)}
-                  />
-                </View>
+                <TranscriptExcerpts
+                  segments={aggregatedVideoAnalysis.transcriptSegments}
+                  brands={aggregatedVideoAnalysis.logoDetections?.map(l => l.brand)}
+                  showHeading={true}
+                />
               )}
             </View>
           )}
 
           {/* Social Profiles */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeader} minPresenceAhead={100}>
               <Text style={styles.sectionTitle}>Social Profiles</Text>
             </View>
             <View style={styles.socialLinksGrid}>
               {socialLinks.map((link, i) => (
                 <Link key={i} src={link} style={styles.socialLink}>
-                  {link}
+                  {formatSocialLink(link)}
                 </Link>
               ))}
             </View>
@@ -923,7 +1052,7 @@ function CreatorPdfDocument({
 
           {/* Findings */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeader} minPresenceAhead={100}>
               <Text style={styles.sectionTitle}>
                 Findings ({findings.length})
               </Text>
@@ -934,6 +1063,7 @@ function CreatorPdfDocument({
                 return (
                   <View
                     key={i}
+                    wrap={false}
                     style={[
                       styles.finding,
                       { borderLeftColor: riskColors[finding.severity.toUpperCase() as RiskLevel]?.border || '#a1a1aa' },
@@ -947,12 +1077,14 @@ function CreatorPdfDocument({
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.findingSummary}>{finding.summary}</Text>
+                    <Text style={styles.findingSummary} orphans={3} widows={3}>
+                      {sanitizeScrapedText(finding.summary)}
+                    </Text>
                     <View style={styles.findingSourceRow}>
                       <Text style={styles.findingSourceLabel}>Source: </Text>
                       <Link src={finding.source.url} style={styles.findingSourceLink}>
                         {finding.source.title}
-                        {finding.source.publishedDate && ` (${finding.source.publishedDate})`}
+                        {finding.source.publishedDate && ` (${formatSourceDate(finding.source.publishedDate)})`}
                       </Link>
                     </View>
                   </View>
@@ -967,7 +1099,7 @@ function CreatorPdfDocument({
         </View>
 
         {/* Footer */}
-        <View style={styles.footer}>
+        <View style={styles.footer} fixed>
           <Text style={styles.footerBrand}>ORCA</Text>
           <Text style={styles.footerText}>
             Generated {generatedAt.toLocaleDateString()} at {generatedAt.toLocaleTimeString()} • Powered by AI
