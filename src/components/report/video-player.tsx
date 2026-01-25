@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   ExternalLink
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getProxiedMediaUrl } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 import type { VisualAnalysisData, LogoDetection, TranscriptSegment } from '@/types';
 
@@ -504,7 +504,7 @@ export function VideoThumbnail({
     >
       {poster ? (
         <img
-          src={poster}
+          src={getProxiedMediaUrl(poster)}
           alt=""
           className="w-full h-full object-cover"
         />

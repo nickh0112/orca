@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, use, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle, Play, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { cn, getPlatformFromUrl } from '@/lib/utils';
+import { cn, getPlatformFromUrl, getProxiedMediaUrl } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { generateCreatorPdf } from '@/components/report/creator-pdf';
 import { VisualAnalysisPanel, VisualAnalysisSummary } from '@/components/report/visual-analysis-panel';
@@ -548,8 +548,8 @@ export default function CreatorReportPage({
                 {/* Video Player (for video content) */}
                 {selectedFinding.socialMediaSource?.mediaType === 'video' ? (
                   <VideoPlayer
-                    src={selectedFinding.socialMediaSource.mediaUrl}
-                    poster={selectedFinding.socialMediaSource.thumbnailUrl}
+                    src={getProxiedMediaUrl(selectedFinding.socialMediaSource.mediaUrl)}
+                    poster={getProxiedMediaUrl(selectedFinding.socialMediaSource.thumbnailUrl)}
                     analysis={selectedFinding.socialMediaSource.visualAnalysis as VisualAnalysisData}
                     fallbackUrl={selectedFinding.source.url}
                     onTimeUpdate={setCurrentVideoTime}
@@ -564,7 +564,7 @@ export default function CreatorReportPage({
                   // Image viewer for images
                   <div className="relative aspect-video bg-zinc-900 rounded-lg overflow-hidden">
                     <img
-                      src={selectedFinding.socialMediaSource.thumbnailUrl}
+                      src={getProxiedMediaUrl(selectedFinding.socialMediaSource.thumbnailUrl)}
                       alt={selectedFinding.title}
                       className="w-full h-full object-contain"
                     />

@@ -1,7 +1,7 @@
 'use client';
 
 import { Instagram, Youtube, Music2, Globe, Play, Eye, AlertTriangle, Tag } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getProxiedMediaUrl } from '@/lib/utils';
 import type { Finding, VisualAnalysisData } from '@/types';
 import type { FlagEvidence } from '@/types/video-analysis';
 
@@ -113,7 +113,7 @@ function PostItem({
       <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-900">
         {hasThumbnail ? (
           <img
-            src={finding.socialMediaSource!.thumbnailUrl}
+            src={getProxiedMediaUrl(finding.socialMediaSource!.thumbnailUrl)}
             alt=""
             className="w-full h-full object-cover"
           />

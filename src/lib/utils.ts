@@ -88,3 +88,22 @@ export function getPlatformFromUrl(url: string): string {
   if (url.includes('twitch.tv')) return 'Twitch';
   return 'Other';
 }
+
+/**
+ * Get a proxied URL for external media to bypass CORS
+ */
+export function getProxiedMediaUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+
+  // Only proxy external CDN URLs
+  const needsProxy = [
+    'cdninstagram.com',
+    'instagram.com',
+    'fbcdn.net',
+    'tiktokcdn.com',
+  ].some(domain => url.includes(domain));
+
+  if (!needsProxy) return url;
+
+  return `/api/media-proxy?url=${encodeURIComponent(url)}`;
+}
