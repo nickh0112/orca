@@ -21,11 +21,58 @@ export interface FindingValidation {
   reason?: string;
 }
 
+// Extended Twelve Labs data structures
+export interface LogoDetection {
+  brand: string;
+  appearances: Array<{
+    startTime: number;
+    endTime: number;
+    confidence: number;
+    prominence?: 'primary' | 'secondary' | 'background';
+  }>;
+  totalDuration: number;
+  likelySponsor: boolean;
+}
+
+/** Per-category score with explanation */
+export interface CategoryScoreWithReason {
+  score: number;               // 0-100
+  reason: string;              // why this score
+  evidenceCount?: number;      // how many instances
+}
+
+export interface ContentClassification {
+  labels: Array<{
+    label: string;
+    duration: number;
+    confidence: number;
+  }>;
+  overallSafetyScore: number;
+  // Detailed safety scores by category (0-100 scale)
+  categoryScores?: {
+    brandSafety?: number | CategoryScoreWithReason;
+    violence?: number | CategoryScoreWithReason;
+    adultContent?: number | CategoryScoreWithReason;
+    political?: number | CategoryScoreWithReason;
+    substanceUse?: number | CategoryScoreWithReason;
+    profanity?: number | CategoryScoreWithReason;
+    dangerous?: number | CategoryScoreWithReason;
+    controversial?: number | CategoryScoreWithReason;
+  };
+}
+
+export interface TranscriptSegment {
+  text: string;
+  start: number;
+  end: number;
+  confidence?: number;
+}
+
 export interface VisualAnalysisData {
   description: string;
   brands: Array<{ brand: string; confidence: 'high' | 'medium' | 'low'; context: string }>;
   actions: Array<{ action: string; isConcerning: boolean; reason?: string }>;
-  textInVideo: Array<{ text: string; context: string }>;
+  textInVideo: Array<{ text: string; context: string; startTime?: number; endTime?: number }>;
   sceneContext: {
     setting: string;
     mood: string;
@@ -33,6 +80,11 @@ export interface VisualAnalysisData {
     concerns: string[];
   };
   brandSafetyRating: 'safe' | 'caution' | 'unsafe';
+  // Extended Twelve Labs data
+  logoDetections?: LogoDetection[];
+  contentClassification?: ContentClassification;
+  transcriptSegments?: TranscriptSegment[];
+  videoDuration?: number;
 }
 
 export interface Finding {

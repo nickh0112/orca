@@ -25,6 +25,13 @@ import {
   TextDetection,
   LogoDetection,
   ContentClassification,
+  SafetyRationale,
+  FlagEvidence,
+  CategoryScore,
+  CategoryScores,
+  FlagCategory,
+  FlagSeverity,
+  FlagSource,
 } from '@/types/video-analysis';
 
 // Twelve Labs API configuration
@@ -103,8 +110,10 @@ async function getOrCreateIndex(): Promise<string> {
       index_name: INDEX_NAME,
       models: [
         {
+          // Note: marengo3.0 only supports 'visual' and 'audio' options
+          // Logo detection works via the summarize API with prompts
           model_name: 'marengo3.0',
-          model_options: ['visual', 'audio', 'logo'],  // Added 'logo' for logo detection
+          model_options: ['visual', 'audio'],
         },
         {
           model_name: 'pegasus1.2',
@@ -354,40 +363,66 @@ async function analyzeComprehensive(
 ): Promise<CombinedAnalysisResult> {
   console.log('[Twelve Labs] Running comprehensive analysis (combined API call)...');
 
-  const prompt = `Analyze this video comprehensively for brand safety. Return a JSON object with this EXACT structure:
+  const prompt = `You are a professional brand safety consultant analyzing this video for a brand partnership evaluation.
+
+Analyze the ENTIRE video thoroughly and return a JSON object with this EXACT structure:
 
 {
   "visual": {
-    "description": "detailed description of the video content",
-    "setting": "where the video takes place",
-    "mood": "overall mood/tone",
-    "contentType": "e.g., vlog, tutorial, comedy, lifestyle",
-    "safetyRating": "safe|caution|unsafe",
-    "safetyReason": "why this rating",
-    "concerns": ["list", "of", "concerns"],
+    "description": "Detailed 2-3 sentence description of video content",
+    "setting": "Where the video takes place",
+    "mood": "Overall tone (e.g., energetic, calm, humorous)",
+    "contentType": "e.g., motivational speech, product review, comedy skit",
     "textInVideo": ["any", "on-screen", "text"],
-    "actions": [{"action": "description", "isConcerning": true/false, "reason": "if concerning"}]
+    "actions": [{"action": "description", "isConcerning": true, "reason": "if concerning"}]
   },
+
+  "safetyAnalysis": {
+    "rating": "safe|caution|unsafe",
+    "summary": "Professional 2-3 sentence summary explaining the safety assessment. Write as a brand safety consultant would to a client.",
+
+    "evidence": [
+      {
+        "category": "profanity|violence|adult|substances|controversial|dangerous|political",
+        "severity": "low|medium|high",
+        "timestamp": 0,
+        "source": "audio|visual|text",
+        "quote": "exact words if applicable",
+        "description": "what was detected",
+        "context": "surrounding context explaining why this was flagged"
+      }
+    ],
+
+    "categoryScores": {
+      "profanity": {"score": 0, "reason": "explanation of what was found or looked for"},
+      "violence": {"score": 0, "reason": "explanation"},
+      "adult": {"score": 0, "reason": "explanation"},
+      "substances": {"score": 0, "reason": "explanation"},
+      "controversial": {"score": 0, "reason": "explanation"},
+      "dangerous": {"score": 0, "reason": "explanation"},
+      "political": {"score": 0, "reason": "explanation"}
+    }
+  },
+
   "brands": [
     {
       "name": "Brand Name",
       "appearances": [{"startTime": 0, "endTime": 5, "prominence": "primary|secondary|background"}],
-      "isSponsor": true/false,
-      "confidence": 0.0-1.0
+      "isSponsor": true,
+      "confidence": 0.9,
+      "sponsorEvidence": "why this appears to be sponsored (if applicable)"
     }
-  ],
-  "classification": {
-    "brandSafeScore": 0-100,
-    "controversial": 0-100,
-    "adultContent": 0-100,
-    "violence": 0-100,
-    "political": 0-100,
-    "substanceUse": 0-100,
-    "dangerousActivities": 0-100
-  }
+  ]
 }
 
-Analyze the ENTIRE video carefully. List ALL visible brands/logos. Be thorough but accurate.`;
+IMPORTANT INSTRUCTIONS:
+1. For EVERY concern, provide the exact timestamp (in seconds) and quote/description
+2. If audio contains profanity, quote the exact words
+3. If something visual is concerning, describe exactly what and when
+4. Write the summary as a professional consultant delivering findings to a client
+5. A score of 0 means "none detected" - always explain what you looked for
+6. Be thorough - missing something is worse than over-flagging
+7. The evidence array should be empty for completely "safe" videos`;
 
   const response = await fetch(`${TWELVE_LABS_API_BASE}/summarize`, {
     method: 'POST',
@@ -416,6 +451,47 @@ Analyze the ENTIRE video carefully. List ALL visible brands/logos. Be thorough b
 }
 
 /**
+ * Helper to parse a category score from the API response
+ */
+function parseCategoryScore(data: { score?: number; reason?: string } | undefined): CategoryScore {
+  return {
+    score: data?.score ?? 0,
+    reason: data?.reason || 'No analysis available',
+    evidenceCount: 0,
+  };
+}
+
+/**
+ * Helper to validate and normalize flag category
+ */
+function normalizeCategory(category: string): FlagCategory {
+  const validCategories: FlagCategory[] = [
+    'profanity', 'violence', 'adult', 'substances',
+    'controversial', 'dangerous', 'political', 'competitor', 'sponsor'
+  ];
+  const normalized = category.toLowerCase() as FlagCategory;
+  return validCategories.includes(normalized) ? normalized : 'controversial';
+}
+
+/**
+ * Helper to validate and normalize flag severity
+ */
+function normalizeSeverity(severity: string): FlagSeverity {
+  const validSeverities: FlagSeverity[] = ['low', 'medium', 'high'];
+  const normalized = severity.toLowerCase() as FlagSeverity;
+  return validSeverities.includes(normalized) ? normalized : 'medium';
+}
+
+/**
+ * Helper to validate and normalize flag source
+ */
+function normalizeSource(source: string): FlagSource {
+  const validSources: FlagSource[] = ['audio', 'visual', 'text', 'transcript'];
+  const normalized = source.toLowerCase() as FlagSource;
+  return validSources.includes(normalized) ? normalized : 'visual';
+}
+
+/**
  * Parse combined analysis JSON response
  */
 function parseCombinedAnalysis(rawText: string): CombinedAnalysisResult {
@@ -430,6 +506,68 @@ function parseCombinedAnalysis(rawText: string): CombinedAnalysisResult {
 
     // Parse visual analysis
     const visual = parsed.visual || {};
+    const safetyAnalysis = parsed.safetyAnalysis || {};
+
+    // Parse evidence array
+    const evidence: FlagEvidence[] = (safetyAnalysis.evidence || []).map((e: {
+      category?: string;
+      severity?: string;
+      timestamp?: number;
+      endTimestamp?: number;
+      source?: string;
+      quote?: string;
+      description?: string;
+      context?: string;
+    }) => ({
+      category: normalizeCategory(e.category || 'controversial'),
+      severity: normalizeSeverity(e.severity || 'medium'),
+      timestamp: e.timestamp || 0,
+      endTimestamp: e.endTimestamp,
+      source: normalizeSource(e.source || 'visual'),
+      quote: e.quote,
+      description: e.description || '',
+      context: e.context,
+    }));
+
+    // Count evidence per category
+    const evidenceCounts: Record<string, number> = {};
+    for (const e of evidence) {
+      evidenceCounts[e.category] = (evidenceCounts[e.category] || 0) + 1;
+    }
+
+    // Parse category scores
+    const rawCategoryScores = safetyAnalysis.categoryScores || {};
+    const categoryScores: CategoryScores = {
+      profanity: { ...parseCategoryScore(rawCategoryScores.profanity), evidenceCount: evidenceCounts['profanity'] || 0 },
+      violence: { ...parseCategoryScore(rawCategoryScores.violence), evidenceCount: evidenceCounts['violence'] || 0 },
+      adult: { ...parseCategoryScore(rawCategoryScores.adult), evidenceCount: evidenceCounts['adult'] || 0 },
+      substances: { ...parseCategoryScore(rawCategoryScores.substances), evidenceCount: evidenceCounts['substances'] || 0 },
+      controversial: { ...parseCategoryScore(rawCategoryScores.controversial), evidenceCount: evidenceCounts['controversial'] || 0 },
+      dangerous: { ...parseCategoryScore(rawCategoryScores.dangerous), evidenceCount: evidenceCounts['dangerous'] || 0 },
+      political: { ...parseCategoryScore(rawCategoryScores.political), evidenceCount: evidenceCounts['political'] || 0 },
+    };
+
+    // Build SafetyRationale
+    const safetyRationale: SafetyRationale = {
+      summary: safetyAnalysis.summary || '',
+      evidence,
+      categoryScores,
+      coverageStats: {
+        videoDuration: 0,  // filled in later from indexInfo
+        transcriptWords: 0,
+        framesAnalyzed: 0,
+      },
+    };
+
+    // Determine safety rating from safetyAnalysis or fall back to legacy visual field
+    const safetyRating = safetyAnalysis.rating || visual.safetyRating || 'safe';
+
+    // Extract concerns from evidence for backwards compatibility
+    const concerns = evidence
+      .filter(e => e.severity === 'medium' || e.severity === 'high')
+      .map(e => e.description || e.quote || `${e.category} detected`)
+      .slice(0, 5);
+
     const visualAnalysis: VisualAnalysis = {
       description: visual.description || '',
       brands: (parsed.brands || []).map((b: { name: string; confidence?: number }) => ({
@@ -451,10 +589,11 @@ function parseCombinedAnalysis(rawText: string): CombinedAnalysisResult {
         setting: visual.setting || '',
         mood: visual.mood || '',
         contentType: visual.contentType || '',
-        concerns: visual.concerns || [],
+        concerns,
       },
-      brandSafetyRating: visual.safetyRating || 'safe',
+      brandSafetyRating: safetyRating as 'safe' | 'caution' | 'unsafe',
       rawAnalysis: rawText,
+      safetyRationale,
     };
 
     // Parse logo detections
@@ -475,32 +614,33 @@ function parseCombinedAnalysis(rawText: string): CombinedAnalysisResult {
       likelySponsor: b.isSponsor || false,
     }));
 
-    // Parse content classification
-    const classification = parsed.classification || {};
+    // Build content classification from category scores
     const labels: ContentClassification['labels'] = [];
-    const labelMapping: Record<string, string> = {
-      brandSafeScore: 'brand_safe',
-      controversial: 'controversial',
-      adultContent: 'adult_content',
+    const categoryToLabel: Record<keyof CategoryScores, string> = {
+      profanity: 'profanity',
       violence: 'violence',
+      adult: 'adult_content',
+      substances: 'substance_use',
+      controversial: 'controversial',
+      dangerous: 'dangerous_activities',
       political: 'political',
-      substanceUse: 'substance_use',
-      dangerousActivities: 'dangerous_activities',
     };
 
-    for (const [key, label] of Object.entries(labelMapping)) {
-      if (typeof classification[key] === 'number') {
+    for (const [category, label] of Object.entries(categoryToLabel)) {
+      const score = categoryScores[category as keyof CategoryScores];
+      if (score) {
         labels.push({
           label,
           duration: 1.0,
-          confidence: classification[key] / 100,
+          confidence: score.score / 100,
         });
       }
     }
 
-    const overallSafetyScore = typeof classification.brandSafeScore === 'number'
-      ? classification.brandSafeScore / 100
-      : 0.7;
+    // Calculate overall safety score (inverse of average risk)
+    const riskScores = Object.values(categoryScores).map(c => c.score);
+    const avgRisk = riskScores.reduce((a, b) => a + b, 0) / riskScores.length;
+    const overallSafetyScore = Math.max(0, Math.min(1, 1 - (avgRisk / 100)));
 
     return {
       visualAnalysis,
@@ -1324,6 +1464,16 @@ export async function analyzeVideoWithOptions(
       // Merge logo detections with visual analysis brands
       const logoBrands = convertLogosToBrands(logoDetections);
       const mergedBrands = mergeBrandDetections(visualAnalysis.brands, logoBrands);
+
+      // Populate coverage stats from transcript and index info
+      const transcriptWordCount = transcript.text.split(/\s+/).filter(w => w.length > 0).length;
+      if (visualAnalysis.safetyRationale) {
+        visualAnalysis.safetyRationale.coverageStats = {
+          videoDuration: indexResult.duration || 0,
+          transcriptWords: transcriptWordCount,
+          framesAnalyzed: Math.floor((indexResult.duration || 0) * 1), // ~1 fps for analysis
+        };
+      }
 
       const enhancedVisualAnalysis: VisualAnalysis = {
         ...visualAnalysis,

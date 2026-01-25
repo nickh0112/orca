@@ -9,7 +9,7 @@ import {
   Link,
   pdf,
 } from '@react-pdf/renderer';
-import type { Finding, RiskLevel } from '@/types';
+import type { Finding, RiskLevel, VisualAnalysisData, LogoDetection, ContentClassification, TranscriptSegment } from '@/types';
 
 // Whalar brand colors
 const WHALAR = {
@@ -255,6 +255,170 @@ const styles = StyleSheet.create({
     backgroundColor: WHALAR.lightGray,
     borderRadius: 4,
   },
+  // Brand Exposure Section
+  brandExposureTable: {
+    marginTop: 8,
+  },
+  brandExposureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e4e4e7',
+  },
+  brandExposureHeader: {
+    backgroundColor: WHALAR.lightGray,
+  },
+  brandExposureLabel: {
+    flex: 2,
+    fontSize: 10,
+    color: WHALAR.black,
+  },
+  brandExposureValue: {
+    flex: 1,
+    fontSize: 10,
+    color: WHALAR.mediumGray,
+    textAlign: 'right',
+  },
+  brandExposureBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 3,
+    marginLeft: 8,
+  },
+  brandExposureBar: {
+    flex: 2,
+    height: 8,
+    backgroundColor: '#e4e4e7',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginLeft: 8,
+  },
+  brandExposureFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  // Safety Score Section
+  safetyScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 8,
+    padding: 16,
+    backgroundColor: WHALAR.lightGray,
+    borderRadius: 4,
+  },
+  safetyScoreGauge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  safetyScoreValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  safetyScoreCategories: {
+    flex: 1,
+    gap: 6,
+  },
+  safetyScoreCategory: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  safetyScoreCategoryLabel: {
+    width: 80,
+    fontSize: 9,
+    color: WHALAR.mediumGray,
+  },
+  safetyScoreCategoryBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#e4e4e7',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  safetyScoreCategoryFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  safetyScoreCategoryValue: {
+    width: 24,
+    fontSize: 9,
+    textAlign: 'right',
+  },
+  // Transcript Section
+  transcriptContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: WHALAR.lightGray,
+    borderRadius: 4,
+  },
+  transcriptSegment: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  transcriptTimestamp: {
+    width: 40,
+    fontSize: 9,
+    color: WHALAR.mediumGray,
+    fontFamily: 'Courier',
+  },
+  transcriptText: {
+    flex: 1,
+    fontSize: 10,
+    color: WHALAR.black,
+    lineHeight: 1.4,
+  },
+  transcriptHighlight: {
+    backgroundColor: '#a855f7',
+    color: WHALAR.white,
+    paddingHorizontal: 2,
+    borderRadius: 2,
+  },
+  // Timeline Visualization
+  timelineContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: WHALAR.lightGray,
+    borderRadius: 4,
+  },
+  timelineBar: {
+    height: 20,
+    backgroundColor: '#e4e4e7',
+    borderRadius: 4,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  timelineMarker: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    borderRadius: 2,
+  },
+  timelineLegend: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 16,
+  },
+  timelineLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  timelineLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  timelineLegendText: {
+    fontSize: 8,
+    color: WHALAR.mediumGray,
+  },
 });
 
 const riskColors: Record<RiskLevel, { bg: string; text: string; border: string }> = {
@@ -280,6 +444,219 @@ interface CreatorPdfProps {
   summary: string | null;
   findings: Finding[];
   generatedAt: Date;
+  // Enhanced video analysis data
+  videoAnalysis?: {
+    logoDetections?: LogoDetection[];
+    contentClassification?: ContentClassification;
+    transcriptSegments?: TranscriptSegment[];
+    transcript?: string;
+    videoDuration?: number;
+  };
+}
+
+// Helper to format duration
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Get color for safety score
+function getSafetyScoreColor(score: number): string {
+  if (score >= 80) return '#22c55e'; // green
+  if (score >= 50) return '#eab308'; // yellow
+  return '#ef4444'; // red
+}
+
+// Brand Exposure Table Component
+function BrandExposureTable({ logoDetections, videoDuration = 60 }: { logoDetections: LogoDetection[]; videoDuration?: number }) {
+  const sortedBrands = [...logoDetections].sort((a, b) => b.totalDuration - a.totalDuration);
+  const maxDuration = Math.max(...sortedBrands.map(l => l.totalDuration), 1);
+
+  return (
+    <View style={styles.brandExposureTable}>
+      {/* Header */}
+      <View style={[styles.brandExposureRow, styles.brandExposureHeader]}>
+        <Text style={[styles.brandExposureLabel, { fontWeight: 'bold' }]}>Brand</Text>
+        <Text style={[styles.brandExposureValue, { fontWeight: 'bold' }]}>Duration</Text>
+        <View style={styles.brandExposureBar} />
+      </View>
+
+      {/* Rows */}
+      {sortedBrands.slice(0, 10).map((logo, i) => {
+        const percentage = (logo.totalDuration / maxDuration) * 100;
+        return (
+          <View key={i} style={styles.brandExposureRow}>
+            <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.brandExposureLabel}>{logo.brand}</Text>
+              {logo.likelySponsor && (
+                <View style={[styles.brandExposureBadge, { backgroundColor: '#a855f7' }]}>
+                  <Text style={{ fontSize: 7, color: WHALAR.white }}>SPONSOR</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.brandExposureValue}>{formatDuration(logo.totalDuration)}</Text>
+            <View style={styles.brandExposureBar}>
+              <View
+                style={[
+                  styles.brandExposureFill,
+                  {
+                    width: `${percentage}%`,
+                    backgroundColor: logo.likelySponsor ? '#a855f7' : '#71717a',
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        );
+      })}
+
+      {sortedBrands.length > 10 && (
+        <Text style={{ fontSize: 9, color: WHALAR.mediumGray, marginTop: 8 }}>
+          +{sortedBrands.length - 10} more brands detected
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// Helper to extract score from category score (handles both number and object formats)
+function extractCategoryScore(value: number | { score: number; reason?: string } | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (typeof value === 'number') return value;
+  return value.score ?? fallback;
+}
+
+// Safety Score Breakdown Component
+function SafetyScoreBreakdown({ classification, brandSafetyRating }: { classification?: ContentClassification; brandSafetyRating?: string }) {
+  const overallScore = classification?.overallSafetyScore
+    ? Math.round(classification.overallSafetyScore * 100)
+    : brandSafetyRating === 'safe' ? 85
+    : brandSafetyRating === 'caution' ? 55
+    : 25;
+
+  const cs = classification?.categoryScores;
+  const categories = [
+    { label: 'Brand Safety', score: extractCategoryScore(cs?.brandSafety, overallScore) },
+    { label: 'Violence', score: extractCategoryScore(cs?.violence, Math.min(overallScore + 10, 100)) },
+    { label: 'Adult Content', score: extractCategoryScore(cs?.adultContent, Math.min(overallScore + 5, 100)) },
+    { label: 'Political', score: extractCategoryScore(cs?.political, overallScore) },
+    { label: 'Substance', score: extractCategoryScore(cs?.substanceUse, Math.min(overallScore + 15, 100)) },
+  ];
+
+  const scoreColor = getSafetyScoreColor(overallScore);
+
+  return (
+    <View style={styles.safetyScoreContainer}>
+      {/* Gauge */}
+      <View style={[styles.safetyScoreGauge, { borderColor: scoreColor }]}>
+        <Text style={[styles.safetyScoreValue, { color: scoreColor }]}>{overallScore}</Text>
+      </View>
+
+      {/* Category bars */}
+      <View style={styles.safetyScoreCategories}>
+        {categories.map((cat, i) => (
+          <View key={i} style={styles.safetyScoreCategory}>
+            <Text style={styles.safetyScoreCategoryLabel}>{cat.label}</Text>
+            <View style={styles.safetyScoreCategoryBar}>
+              <View
+                style={[
+                  styles.safetyScoreCategoryFill,
+                  {
+                    width: `${cat.score}%`,
+                    backgroundColor: getSafetyScoreColor(cat.score),
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[styles.safetyScoreCategoryValue, { color: getSafetyScoreColor(cat.score) }]}>
+              {cat.score}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Transcript Excerpts Component
+function TranscriptExcerpts({ segments, brands = [] }: { segments: TranscriptSegment[]; brands?: string[] }) {
+  // Get key excerpts (first few and any with brand mentions)
+  const keyExcerpts = segments.slice(0, 5);
+
+  return (
+    <View style={styles.transcriptContainer}>
+      {keyExcerpts.map((segment, i) => (
+        <View key={i} style={styles.transcriptSegment}>
+          <Text style={styles.transcriptTimestamp}>{formatDuration(segment.start)}</Text>
+          <Text style={styles.transcriptText}>{segment.text}</Text>
+        </View>
+      ))}
+      {segments.length > 5 && (
+        <Text style={{ fontSize: 9, color: WHALAR.mediumGray, marginTop: 4 }}>
+          ... {segments.length - 5} more segments
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// Timeline Visualization Component
+function TimelineVisualization({ logoDetections, videoDuration = 60 }: { logoDetections: LogoDetection[]; videoDuration?: number }) {
+  // Flatten all appearances
+  const allAppearances: Array<{ brand: string; start: number; end: number; color: string }> = [];
+  logoDetections.forEach(logo => {
+    logo.appearances.forEach(app => {
+      allAppearances.push({
+        brand: logo.brand,
+        start: app.startTime,
+        end: app.endTime,
+        color: logo.likelySponsor ? '#a855f7' : '#71717a',
+      });
+    });
+  });
+
+  return (
+    <View style={styles.timelineContainer}>
+      <View style={styles.timelineBar}>
+        {allAppearances.map((app, i) => {
+          const left = (app.start / videoDuration) * 100;
+          const width = Math.max(((app.end - app.start) / videoDuration) * 100, 1);
+          return (
+            <View
+              key={i}
+              style={[
+                styles.timelineMarker,
+                {
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  backgroundColor: app.color,
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
+
+      {/* Time labels */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+        <Text style={{ fontSize: 8, color: WHALAR.mediumGray }}>0:00</Text>
+        <Text style={{ fontSize: 8, color: WHALAR.mediumGray }}>{formatDuration(videoDuration)}</Text>
+      </View>
+
+      {/* Legend */}
+      <View style={styles.timelineLegend}>
+        <View style={styles.timelineLegendItem}>
+          <View style={[styles.timelineLegendDot, { backgroundColor: '#a855f7' }]} />
+          <Text style={styles.timelineLegendText}>Likely Sponsor</Text>
+        </View>
+        <View style={styles.timelineLegendItem}>
+          <View style={[styles.timelineLegendDot, { backgroundColor: '#71717a' }]} />
+          <Text style={styles.timelineLegendText}>Incidental</Text>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 // Helper to count severity levels
@@ -289,6 +666,61 @@ function countSeverities(findings: Finding[]) {
     high: findings.filter(f => f.severity === 'high').length,
     medium: findings.filter(f => f.severity === 'medium').length,
     low: findings.filter(f => f.severity === 'low').length,
+  };
+}
+
+// Helper to aggregate video analysis data from findings
+function aggregateVideoAnalysisFromFindings(findings: Finding[]): CreatorPdfProps['videoAnalysis'] {
+  const logoDetections: LogoDetection[] = [];
+  const transcriptSegments: TranscriptSegment[] = [];
+  let contentClassification: ContentClassification | undefined;
+  let transcript = '';
+  let videoDuration = 0;
+
+  for (const finding of findings) {
+    const va = finding.socialMediaSource?.visualAnalysis as VisualAnalysisData | undefined;
+    if (!va) continue;
+
+    // Aggregate logo detections
+    if (va.logoDetections) {
+      for (const logo of va.logoDetections) {
+        const existing = logoDetections.find(l => l.brand === logo.brand);
+        if (existing) {
+          existing.appearances.push(...logo.appearances);
+          existing.totalDuration += logo.totalDuration;
+          existing.likelySponsor = existing.likelySponsor || logo.likelySponsor;
+        } else {
+          logoDetections.push({ ...logo });
+        }
+      }
+    }
+
+    // Aggregate transcript segments
+    if (va.transcriptSegments) {
+      transcriptSegments.push(...va.transcriptSegments);
+    }
+
+    // Use first content classification found
+    if (!contentClassification && va.contentClassification) {
+      contentClassification = va.contentClassification;
+    }
+
+    // Aggregate video duration
+    if (va.videoDuration) {
+      videoDuration += va.videoDuration;
+    }
+  }
+
+  if (logoDetections.length === 0 && transcriptSegments.length === 0 && !contentClassification) {
+    return undefined;
+  }
+
+  return {
+    logoDetections: logoDetections.length > 0 ? logoDetections : undefined,
+    contentClassification,
+    transcriptSegments: transcriptSegments.length > 0 ? transcriptSegments : undefined,
+    transcript,
+    videoDuration: videoDuration || 60,
   };
 }
 
@@ -337,9 +769,13 @@ function CreatorPdfDocument({
   summary,
   findings,
   generatedAt,
+  videoAnalysis,
 }: CreatorPdfProps) {
   const riskColor = riskColors[riskLevel];
   const severityCounts = countSeverities(findings);
+
+  // Extract video analysis data from findings if not provided separately
+  const aggregatedVideoAnalysis = videoAnalysis || aggregateVideoAnalysisFromFindings(findings);
 
   return (
     <Document>
@@ -422,6 +858,52 @@ function CreatorPdfDocument({
                 }
                 return null;
               })}
+            </View>
+          )}
+
+          {/* Video Insights Section (new) */}
+          {aggregatedVideoAnalysis && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Video Analysis Insights</Text>
+              </View>
+
+              {/* Safety Score Breakdown */}
+              {(aggregatedVideoAnalysis.contentClassification || findings.some(f => f.socialMediaSource?.visualAnalysis?.brandSafetyRating)) && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.analysisHeading}>Safety Score Breakdown</Text>
+                  <SafetyScoreBreakdown
+                    classification={aggregatedVideoAnalysis.contentClassification}
+                    brandSafetyRating={findings.find(f => f.socialMediaSource?.visualAnalysis?.brandSafetyRating)?.socialMediaSource?.visualAnalysis?.brandSafetyRating}
+                  />
+                </View>
+              )}
+
+              {/* Brand Exposure */}
+              {aggregatedVideoAnalysis.logoDetections && aggregatedVideoAnalysis.logoDetections.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.analysisHeading}>Brand Exposure Summary</Text>
+                  <BrandExposureTable
+                    logoDetections={aggregatedVideoAnalysis.logoDetections}
+                    videoDuration={aggregatedVideoAnalysis.videoDuration}
+                  />
+                  <TimelineVisualization
+                    logoDetections={aggregatedVideoAnalysis.logoDetections}
+                    videoDuration={aggregatedVideoAnalysis.videoDuration}
+                  />
+                </View>
+              )}
+
+              {/* Key Transcript Excerpts */}
+              {aggregatedVideoAnalysis.transcriptSegments && aggregatedVideoAnalysis.transcriptSegments.length > 0 && (
+                <View>
+                  <Text style={styles.analysisHeading}>Key Transcript Excerpts</Text>
+                  <TranscriptExcerpts
+                    segments={aggregatedVideoAnalysis.transcriptSegments}
+                    brands={aggregatedVideoAnalysis.logoDetections?.map(l => l.brand)}
+                  />
+                </View>
+              )}
             </View>
           )}
 

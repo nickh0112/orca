@@ -8,6 +8,8 @@ export interface VisualAnalysis {
   sceneContext: SceneContext;
   brandSafetyRating: 'safe' | 'caution' | 'unsafe';
   rawAnalysis?: string;
+  /** Professional brand safety rationale with timestamped evidence */
+  safetyRationale?: SafetyRationale;
 }
 
 export interface BrandDetection {
@@ -111,9 +113,10 @@ export interface ApifyTikTokPost {
   videoMeta: {
     duration: number;
     coverUrl: string;
-    downloadUrl: string;
-    playUrl: string;
+    downloadUrl?: string;  // May not be provided by newer Apify versions
+    playUrl?: string;      // May not be provided by newer Apify versions
   };
+  mediaUrls?: string[];    // Apify-hosted video URLs (when shouldDownloadVideos: true)
   diggCount: number;
   shareCount: number;
   playCount: number;
@@ -129,7 +132,7 @@ export interface ApifyInstagramPost {
   timestamp: string;
   displayUrl: string;
   videoUrl?: string;
-  isVideo: boolean;
+  type: 'Video' | 'Image' | 'Sidecar';
   likesCount: number;
   commentsCount: number;
   url: string;
@@ -163,6 +166,8 @@ export interface MediaItem {
   type: MediaType;
   url: string;
   buffer?: Buffer;
+  /** MIME type of the media (e.g., 'video/mp4'). Used for video uploads. */
+  contentType?: string;
 }
 
 export interface MediaAnalysisResult {
@@ -216,4 +221,71 @@ export interface PreScreenResult {
   confidence: number;
   /** Brief description of thumbnail content */
   thumbnailDescription?: string;
+}
+
+// ============================================================================
+// Professional Brand Safety Analysis Types
+// ============================================================================
+
+/** Category types for safety flags */
+export type FlagCategory =
+  | 'profanity'
+  | 'violence'
+  | 'adult'
+  | 'substances'
+  | 'controversial'
+  | 'dangerous'
+  | 'political'
+  | 'competitor'
+  | 'sponsor';
+
+/** Severity levels for flags */
+export type FlagSeverity = 'low' | 'medium' | 'high';
+
+/** Source type for where the flag was detected */
+export type FlagSource = 'audio' | 'visual' | 'text' | 'transcript';
+
+/** Evidence for a specific flag/concern with timestamp and quote */
+export interface FlagEvidence {
+  category: FlagCategory;
+  severity: FlagSeverity;
+  timestamp: number;           // seconds into video
+  endTimestamp?: number;       // for duration-based flags
+  source: FlagSource;
+  quote?: string;              // exact words if audio/text
+  description: string;         // what was detected
+  context?: string;            // surrounding context
+}
+
+/** Per-category score with explanation */
+export interface CategoryScore {
+  score: number;               // 0-100
+  reason: string;              // why this score
+  evidenceCount?: number;      // how many instances
+}
+
+/** Category scores for all safety dimensions */
+export interface CategoryScores {
+  profanity: CategoryScore;
+  violence: CategoryScore;
+  adult: CategoryScore;
+  substances: CategoryScore;
+  controversial: CategoryScore;
+  dangerous: CategoryScore;
+  political: CategoryScore;
+}
+
+/** Coverage statistics for analysis completeness */
+export interface CoverageStats {
+  videoDuration: number;
+  transcriptWords: number;
+  framesAnalyzed: number;
+}
+
+/** Complete safety rationale with evidence */
+export interface SafetyRationale {
+  summary: string;             // 2-3 sentence professional summary
+  evidence: FlagEvidence[];    // all flagged items with timestamps
+  categoryScores: CategoryScores;
+  coverageStats: CoverageStats;
 }
