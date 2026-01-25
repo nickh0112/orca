@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, use, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, X, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle, Play, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Instagram, Youtube, Music2, Globe, Download, Eye, Tag, AlertTriangle, Play, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { cn, getPlatformFromUrl, getProxiedMediaUrl } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
@@ -450,14 +450,6 @@ export default function CreatorReportPage({
               className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-            </button>
-            <button className="px-4 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors flex items-center gap-1.5">
-              <Check className="w-4 h-4" />
-              <span>Approve</span>
-            </button>
-            <button className="px-4 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded transition-colors flex items-center gap-1.5">
-              <X className="w-4 h-4" />
-              <span>Reject</span>
             </button>
           </div>
         </div>

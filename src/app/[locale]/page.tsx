@@ -133,14 +133,13 @@ export default function DashboardPage() {
   const trendChartData = useMemo(() => {
     if (!stats?.activityTrend) return [];
 
-    // Transform the activity trend data into the format expected by the chart
-    // In a real app, you'd have this data from the API
+    // Return zeros until real trend data is available from the API
     return stats.activityTrend.map((item) => ({
       month: item.month,
-      critical: Math.floor(Math.random() * 5),
-      high: Math.floor(Math.random() * 10),
-      medium: Math.floor(Math.random() * 15),
-      low: Math.floor(Math.random() * 20),
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
     }));
   }, [stats?.activityTrend]);
 

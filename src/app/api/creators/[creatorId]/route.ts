@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+function safeJsonParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 // GET /api/creators/[creatorId] - Get creator with full report
 export async function GET(
   request: NextRequest,
@@ -27,20 +35,20 @@ export async function GET(
       return NextResponse.json({ error: 'Creator not found' }, { status: 404 });
     }
 
-    // Parse JSON fields
+    // Parse JSON fields safely to prevent crashes on malformed data
     const response = {
       ...creator,
-      socialLinks: JSON.parse(creator.socialLinks),
+      socialLinks: safeJsonParse(creator.socialLinks, []),
       report: creator.report
         ? {
             ...creator.report,
-            findings: JSON.parse(creator.report.findings),
-            searchQueries: JSON.parse(creator.report.searchQueries),
+            findings: safeJsonParse(creator.report.findings, []),
+            searchQueries: safeJsonParse(creator.report.searchQueries, []),
           }
         : null,
       attachments: creator.attachments.map((att) => ({
         ...att,
-        data: JSON.parse(att.data),
+        data: safeJsonParse(att.data, {}),
       })),
     };
 
