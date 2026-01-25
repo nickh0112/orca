@@ -160,17 +160,21 @@
       "detectedContent": "Detected Content Types",
       "categories": {
         "brandSafety": "Brand Safety",
+        "profanity": "Profanity",
         "violence": "Violence",
         "adultContent": "Adult Content",
         "political": "Political Content",
-        "substanceUse": "Substance Use"
+        "substanceUse": "Substance Use",
+        "dangerous": "Dangerous Activities"
       },
       "descriptions": {
         "brandSafety": "Overall brand appropriateness and alignment",
+        "profanity": "Explicit language or profanity",
         "violence": "Violent imagery or aggressive content",
         "adultContent": "Mature or explicit content",
         "political": "Political messaging or controversial topics",
-        "substanceUse": "Alcohol, tobacco, or drug references"
+        "substanceUse": "Alcohol, tobacco, or drug references",
+        "dangerous": "Stunts or dangerous behavior"
       }
     },
     "brandExposure": {

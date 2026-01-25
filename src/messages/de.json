@@ -149,6 +149,72 @@
       },
       "summaryTitle": "Visuelle Einblicke ({count} Videos analysiert)",
       "brandsAcrossVideos": "Erkannte Marken in Videos:"
+    },
+    "safetyBreakdown": {
+      "title": "Sicherheitsbewertung",
+      "overallDescription": "Gesamtbewertung der Markensicherheit basierend auf Inhaltsanalyse",
+      "lowRisk": "Niedriges Risiko",
+      "moderate": "Moderat",
+      "highRisk": "Hohes Risiko",
+      "categoryBreakdown": "Kategorieaufschlüsselung",
+      "detectedContent": "Erkannte Inhaltstypen",
+      "categories": {
+        "brandSafety": "Markensicherheit",
+        "profanity": "Vulgärsprache",
+        "violence": "Gewalt",
+        "adultContent": "Erwachseneninhalte",
+        "political": "Politische Inhalte",
+        "substanceUse": "Substanzkonsum",
+        "dangerous": "Gefährliche Aktivitäten"
+      },
+      "descriptions": {
+        "brandSafety": "Allgemeine Markeneignung und Übereinstimmung",
+        "profanity": "Explizite Sprache oder Schimpfwörter",
+        "violence": "Gewalttätige Bilder oder aggressive Inhalte",
+        "adultContent": "Nicht jugendfreie oder explizite Inhalte",
+        "political": "Politische Botschaften oder kontroverse Themen",
+        "substanceUse": "Alkohol-, Tabak- oder Drogenreferenzen",
+        "dangerous": "Stunts oder gefährliches Verhalten"
+      }
+    },
+    "brandExposure": {
+      "title": "Markenexpositionsanalyse",
+      "screenTime": "Bildschirmzeit",
+      "prominence": "Prominenz",
+      "likelySponsors": "Wahrscheinliche Sponsoren",
+      "incidentalBrands": "Beiläufige Auftritte",
+      "totalExposure": "Gesamte Markenexposition",
+      "seconds": "Sek",
+      "primary": "Primär",
+      "secondary": "Sekundär",
+      "background": "Hintergrund",
+      "sponsorBadge": "Sponsor",
+      "noData": "Keine Markenexpositionsdaten verfügbar",
+      "appearanceCount": "{count, plural, one {# Auftritt} other {# Auftritte}}"
+    },
+    "transcript": {
+      "title": "Transkript",
+      "search": "Transkript durchsuchen...",
+      "noResults": "Keine Treffer gefunden",
+      "clickToSeek": "Klicken um zur Zeitmarke zu springen",
+      "noTranscript": "Kein Transkript verfügbar",
+      "brandMention": "Marke erwähnt"
+    },
+    "videoPlayer": {
+      "play": "Abspielen",
+      "pause": "Pausieren",
+      "mute": "Stummschalten",
+      "unmute": "Ton einschalten",
+      "fullscreen": "Vollbild",
+      "exitFullscreen": "Vollbild beenden",
+      "videoUnavailable": "Video nicht verfügbar",
+      "loadError": "Video konnte nicht geladen werden"
+    },
+    "competitorAlert": {
+      "title": "Wettbewerber-Warnung",
+      "description": "Dieser Creator zeigt Wettbewerbermarken prominent",
+      "detected": "Wettbewerbermarken erkannt",
+      "exposure": "Wettbewerber-Exposition"
     }
   },
   "bulkImport": {

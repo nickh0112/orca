@@ -10,6 +10,7 @@ export interface InstagramPost {
   media_product_type: string;
   media_type: string;
   media_url?: string;
+  thumbnail_url?: string;
   permalink: string;
   timestamp: string;
 }

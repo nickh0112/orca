@@ -85,6 +85,34 @@ export interface VisualAnalysisData {
   contentClassification?: ContentClassification;
   transcriptSegments?: TranscriptSegment[];
   videoDuration?: number;
+  // Professional brand safety rationale with timestamped evidence
+  safetyRationale?: {
+    summary: string;
+    evidence: Array<{
+      category: string;
+      severity: 'low' | 'medium' | 'high';
+      timestamp: number;
+      endTimestamp?: number;
+      source: 'audio' | 'visual' | 'text' | 'transcript';
+      quote?: string;
+      description: string;
+      context?: string;
+    }>;
+    categoryScores: {
+      profanity: { score: number; reason: string; evidenceCount?: number };
+      violence: { score: number; reason: string; evidenceCount?: number };
+      adult: { score: number; reason: string; evidenceCount?: number };
+      substances: { score: number; reason: string; evidenceCount?: number };
+      controversial: { score: number; reason: string; evidenceCount?: number };
+      dangerous: { score: number; reason: string; evidenceCount?: number };
+      political: { score: number; reason: string; evidenceCount?: number };
+    };
+    coverageStats: {
+      videoDuration: number;
+      transcriptWords: number;
+      framesAnalyzed: number;
+    };
+  };
 }
 
 export interface Finding {

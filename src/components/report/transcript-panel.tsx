@@ -86,9 +86,34 @@ export function TranscriptPanel({
   const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // Generate segments from full text if not provided
+  // Merge word-level segments into ~5 second chunks for readability
   const processedSegments = useMemo(() => {
     if (segments && segments.length > 0) {
-      return segments;
+      // Merge word-level segments into ~5 second chunks
+      const CHUNK_DURATION = 5; // seconds
+      const merged: TranscriptSegment[] = [];
+      let current: TranscriptSegment | null = null;
+
+      for (const seg of segments) {
+        if (!current) {
+          current = { ...seg };
+        } else if (seg.start - current.start < CHUNK_DURATION) {
+          // Within chunk duration, merge text
+          current.text += ' ' + seg.text;
+          current.end = seg.end;
+          // Keep lowest confidence if available
+          if (seg.confidence !== undefined && current.confidence !== undefined) {
+            current.confidence = Math.min(current.confidence, seg.confidence);
+          }
+        } else {
+          // Start a new chunk
+          merged.push(current);
+          current = { ...seg };
+        }
+      }
+      if (current) merged.push(current);
+
+      return merged;
     }
     // If only full text is provided, create a single segment
     if (fullText) {
@@ -144,13 +169,8 @@ export function TranscriptPanel({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery, matchingSegments, matchIndex, navigateToMatch]);
 
-  // Auto-scroll to current segment during playback
-  useEffect(() => {
-    if (currentSegmentIndex >= 0 && !searchQuery) {
-      const element = segmentRefs.current.get(currentSegmentIndex);
-      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [currentSegmentIndex, searchQuery]);
+  // Auto-scroll disabled - it was scrolling the entire page, not just the transcript container.
+  // Users can click timestamps to jump to specific parts of the transcript.
 
   if (processedSegments.length === 0) {
     return (

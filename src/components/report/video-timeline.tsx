@@ -1,29 +1,36 @@
 'use client';
 
 import { useMemo, useState, useRef, useCallback } from 'react';
-import { Play, Pause, Tag, AlertTriangle, Eye, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Play, Pause, Tag, AlertTriangle, Eye, ZoomIn, ZoomOut, RotateCcw, Volume2, Skull, Wine, Flame, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VisualAnalysisData, LogoDetection, TranscriptSegment } from '@/types';
+import type { FlagEvidence, FlagCategory, FlagSeverity } from '@/types/video-analysis';
 
 interface TimelineMarker {
   id: string;
   startTime: number;
   endTime: number;
-  type: 'brand' | 'concern' | 'text';
+  type: 'brand' | 'concern' | 'text' | 'flag';
   label: string;
   color: string;
   prominence?: 'primary' | 'secondary' | 'background';
   confidence?: number;
+  severity?: FlagSeverity;
+  category?: FlagCategory;
 }
 
 interface VideoTimelineProps {
   analysis: VisualAnalysisData;
+  /** Flag evidence for safety markers */
+  evidence?: FlagEvidence[];
   duration?: number;
   currentTime?: number;
   isPlaying?: boolean;
   className?: string;
   onSeek?: (time: number) => void;
   onTogglePlay?: () => void;
+  /** Callback when a flag marker is clicked */
+  onFlagClick?: (evidence: FlagEvidence) => void;
 }
 
 const formatTime = (seconds: number) => {
@@ -32,14 +39,58 @@ const formatTime = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+/**
+ * Get color for flag category
+ */
+function getFlagCategoryColor(category: FlagCategory, severity: FlagSeverity): string {
+  // High severity always red
+  if (severity === 'high') return 'bg-red-500';
+
+  // Category-based colors for medium/low
+  const categoryColors: Record<FlagCategory, string> = {
+    profanity: 'bg-red-400',
+    violence: 'bg-orange-500',
+    adult: 'bg-pink-500',
+    substances: 'bg-purple-500',
+    controversial: 'bg-amber-500',
+    dangerous: 'bg-red-400',
+    political: 'bg-blue-500',
+    competitor: 'bg-rose-500',
+    sponsor: 'bg-emerald-500',
+  };
+  return categoryColors[category] || 'bg-amber-500';
+}
+
+/**
+ * Get icon for flag category
+ */
+function getFlagCategoryIcon(category: FlagCategory) {
+  switch (category) {
+    case 'profanity':
+      return Volume2;
+    case 'violence':
+    case 'dangerous':
+      return Skull;
+    case 'substances':
+      return Wine;
+    case 'competitor':
+    case 'sponsor':
+      return Tag;
+    default:
+      return Flag;
+  }
+}
+
 export function VideoTimeline({
   analysis,
+  evidence,
   duration: propDuration,
   currentTime = 0,
   isPlaying = false,
   className,
   onSeek,
-  onTogglePlay
+  onTogglePlay,
+  onFlagClick
 }: VideoTimelineProps) {
   const [zoom, setZoom] = useState(1);
   const [hoveredMarker, setHoveredMarker] = useState<TimelineMarker | null>(null);
@@ -53,6 +104,22 @@ export function VideoTimeline({
   // Prioritize actual timestamps from logoDetections if available
   const markers = useMemo(() => {
     const result: TimelineMarker[] = [];
+
+    // Add flag evidence markers (highest priority - shown on top)
+    if (evidence && evidence.length > 0) {
+      evidence.forEach((flag, index) => {
+        result.push({
+          id: `flag-${flag.category}-${flag.timestamp}-${index}`,
+          startTime: flag.timestamp,
+          endTime: flag.endTimestamp ?? flag.timestamp + 2,
+          type: 'flag',
+          label: flag.quote || flag.description,
+          color: getFlagCategoryColor(flag.category, flag.severity),
+          severity: flag.severity,
+          category: flag.category,
+        });
+      });
+    }
 
     // Add brand detection markers
     if (analysis.logoDetections && analysis.logoDetections.length > 0) {
@@ -103,8 +170,8 @@ export function VideoTimeline({
       });
     }
 
-    // Add concern markers
-    if (analysis.sceneContext?.concerns) {
+    // Add concern markers (skip if we have evidence - they're redundant)
+    if (analysis.sceneContext?.concerns && (!evidence || evidence.length === 0)) {
       analysis.sceneContext.concerns.forEach((concern, index) => {
         const startTime = ((30 + (index * 30) % 60) / 100) * duration;
         result.push({
@@ -119,7 +186,7 @@ export function VideoTimeline({
     }
 
     return result.sort((a, b) => a.startTime - b.startTime);
-  }, [analysis, duration]);
+  }, [analysis, evidence, duration]);
 
   // Handle timeline click for seeking
   const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -136,7 +203,17 @@ export function VideoTimeline({
   const handleMarkerClick = useCallback((marker: TimelineMarker, e: React.MouseEvent) => {
     e.stopPropagation();
     onSeek?.(marker.startTime);
-  }, [onSeek]);
+
+    // If it's a flag marker and we have the callback, find and call with the evidence
+    if (marker.type === 'flag' && onFlagClick && evidence) {
+      const matchingEvidence = evidence.find(
+        ev => ev.category === marker.category && ev.timestamp === marker.startTime
+      );
+      if (matchingEvidence) {
+        onFlagClick(matchingEvidence);
+      }
+    }
+  }, [onSeek, onFlagClick, evidence]);
 
   // Calculate position percentage
   const getPositionPercent = (time: number) => (time / duration) * 100;
@@ -199,7 +276,7 @@ export function VideoTimeline({
         <div
           ref={timelineRef}
           className={cn(
-            'h-12 bg-zinc-800/50 rounded-lg relative overflow-hidden',
+            'h-12 bg-zinc-800/50 rounded-lg relative',
             onSeek && 'cursor-pointer'
           )}
           onClick={handleTimelineClick}
@@ -263,17 +340,39 @@ export function VideoTimeline({
                 <div className={cn(
                   'absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-3 py-2',
                   'bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl',
-                  'text-xs text-zinc-300 whitespace-nowrap z-50',
+                  'text-xs text-zinc-300 z-50 max-w-[200px]',
                   'opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none'
                 )}>
                   <div className="flex items-center gap-2 mb-1">
                     {marker.type === 'brand' && <Tag size={12} className="text-purple-400" />}
                     {marker.type === 'concern' && <AlertTriangle size={12} className="text-amber-400" />}
                     {marker.type === 'text' && <Eye size={12} className="text-cyan-400" />}
-                    <span className="font-medium">{marker.label}</span>
+                    {marker.type === 'flag' && (() => {
+                      const FlagIcon = getFlagCategoryIcon(marker.category!);
+                      const severityColor = marker.severity === 'high' ? 'text-red-400' : marker.severity === 'medium' ? 'text-amber-400' : 'text-yellow-400';
+                      return <FlagIcon size={12} className={severityColor} />;
+                    })()}
+                    <span className="font-medium truncate">
+                      {marker.type === 'flag' ? marker.category?.toUpperCase() : marker.label}
+                    </span>
                   </div>
+                  {marker.type === 'flag' && marker.label && (
+                    <p className="text-[10px] text-zinc-400 mb-1 line-clamp-2 italic">
+                      "{marker.label}"
+                    </p>
+                  )}
                   <div className="text-[10px] text-zinc-500 space-y-0.5">
-                    <div>{formatTime(marker.startTime)} - {formatTime(marker.endTime)}</div>
+                    <div>{formatTime(marker.startTime)}{marker.endTime > marker.startTime + 1 ? ` - ${formatTime(marker.endTime)}` : ''}</div>
+                    {marker.type === 'flag' && marker.severity && (
+                      <div className={cn(
+                        'uppercase font-medium',
+                        marker.severity === 'high' && 'text-red-400',
+                        marker.severity === 'medium' && 'text-amber-400',
+                        marker.severity === 'low' && 'text-yellow-400'
+                      )}>
+                        {marker.severity} severity
+                      </div>
+                    )}
                     {marker.prominence && (
                       <div className="capitalize">{marker.prominence} placement</div>
                     )}
@@ -310,7 +409,25 @@ export function VideoTimeline({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 pt-1">
+      <div className="flex items-center gap-4 pt-1 flex-wrap">
+        {markers.some(m => m.type === 'flag' && m.severity === 'high') && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-red-500" />
+            <span className="text-[10px] text-zinc-500">High Risk</span>
+          </div>
+        )}
+        {markers.some(m => m.type === 'flag' && m.severity === 'medium') && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="text-[10px] text-zinc-500">Medium Risk</span>
+          </div>
+        )}
+        {markers.some(m => m.type === 'flag' && m.severity === 'low') && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-yellow-500" />
+            <span className="text-[10px] text-zinc-500">Low Risk</span>
+          </div>
+        )}
         {markers.some(m => m.type === 'brand') && (
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-purple-500" />

@@ -162,7 +162,7 @@ export async function fetchTikTokViaApify(
           profiles: [handle],
           resultsPerPage: CONFIG.MAX_POSTS_DEFAULT,
           shouldDownloadVideos: true, // Required to get video URLs - Apify hosts the video
-          shouldDownloadCovers: false,
+          shouldDownloadCovers: true, // Enable cover downloads to get thumbnail URLs
         }),
       }
     );
@@ -239,7 +239,10 @@ export async function fetchTikTokViaApify(
             shares: post.shareCount,
           },
           mediaUrl,
-          thumbnailUrl: post.videoMeta?.coverUrl,
+          // Thumbnail fallback chain: coverUrl > first cover from mediaUrls > constructed from webVideoUrl
+          thumbnailUrl: post.videoMeta?.coverUrl
+            || post.covers?.[0]
+            || (post.webVideoUrl ? `https://www.tiktok.com/api/img/?itemId=${post.id}&location=0` : undefined),
           mediaType: 'video' as const,
         };
       });

@@ -117,6 +117,7 @@ export interface ApifyTikTokPost {
     playUrl?: string;      // May not be provided by newer Apify versions
   };
   mediaUrls?: string[];    // Apify-hosted video URLs (when shouldDownloadVideos: true)
+  covers?: string[];       // Cover image URLs from Apify
   diggCount: number;
   shareCount: number;
   playCount: number;

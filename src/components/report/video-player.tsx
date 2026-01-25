@@ -25,6 +25,7 @@ interface VideoPlayerProps {
   onTimeUpdate?: (time: number) => void;
   onDurationChange?: (duration: number) => void;
   onPlayStateChange?: (isPlaying: boolean) => void;
+  onSeeked?: () => void;
   externalCurrentTime?: number;
   externalSeekTo?: number;
   fallbackUrl?: string;
@@ -52,6 +53,7 @@ export function VideoPlayer({
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
+  onSeeked,
   externalCurrentTime,
   externalSeekTo,
   fallbackUrl
@@ -274,6 +276,7 @@ export function VideoPlayer({
         onPause={handlePause}
         onError={handleError}
         onLoadedData={handleLoadedData}
+        onSeeked={() => onSeeked?.()}
         playsInline
       />
 

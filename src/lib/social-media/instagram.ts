@@ -43,7 +43,7 @@ async function queryGraphAPI(
     throw new Error('Instagram API credentials not configured');
   }
 
-  const fields = `business_discovery.username(${handle}){name,followers_count,biography,follows_count,media.limit(${POSTS_PER_REQUEST}).since(${since}).until(${until}){caption,comments_count,like_count,media_product_type,media_type,media_url,permalink,timestamp}}`;
+  const fields = `business_discovery.username(${handle}){name,followers_count,biography,follows_count,media.limit(${POSTS_PER_REQUEST}).since(${since}).until(${until}){caption,comments_count,like_count,media_product_type,media_type,media_url,thumbnail_url,permalink,timestamp}}`;
 
   const url = `${BASE_URL}/${FACEBOOK_REQUEST_USER_ID}?fields=${encodeURIComponent(fields)}&access_token=${FACEBOOK_ACCESS_TOKEN}`;
 
@@ -152,7 +152,7 @@ function convertToSocialMediaPosts(posts: InstagramPost[]): SocialMediaPost[] {
       comments: post.comments_count,
     },
     mediaUrl: post.media_url,
-    thumbnailUrl: post.media_url, // Instagram uses same URL for thumbnail
+    thumbnailUrl: post.thumbnail_url || post.media_url, // Use thumbnail_url for videos, fallback to media_url
     mediaType: mapMediaType(post.media_type),
   }));
 }
