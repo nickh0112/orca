@@ -180,12 +180,23 @@ export class MediaAnalysisQueue {
   ): Promise<MediaAnalysisResult | null> {
     let lastError: Error | null = null;
 
+    // Debug logging for video processing
+    console.log(`[MediaQueue] Processing video ${video.id}:`);
+    console.log(`  URL: ${video.url.slice(0, 60)}...`);
+    console.log(`  Buffer: ${video.buffer ? `${(video.buffer.length / 1024).toFixed(0)}KB` : 'not provided'}`);
+    console.log(`  ContentType: ${video.contentType || 'default (video/mp4)'}`);
+
     for (let attempt = 0; attempt <= this.retries; attempt++) {
       try {
-        const result = await analyzeVideoWithOptions(video.url, video.buffer, {
-          skipLogoDetection: false,
-          skipClassification: false,
-        });
+        const result = await analyzeVideoWithOptions(
+          video.url,
+          video.buffer,
+          {
+            skipLogoDetection: false,
+            skipClassification: false,
+          },
+          video.contentType || 'video/mp4'
+        );
 
         if (result) {
           this.updateStats(true);

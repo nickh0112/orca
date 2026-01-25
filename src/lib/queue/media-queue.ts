@@ -24,6 +24,7 @@ import {
   type ImageAnalysisJobData,
   type ScraperJobData,
   type BatchCoordinatorJobData,
+  type AdFormatAnalysisJobData,
   type JobProgress,
 } from './job-types';
 import { getRedisConnectionOptions, isRedisConfigured } from './redis-client';
@@ -178,6 +179,41 @@ export async function addBatchCoordinatorJob(
   });
   console.log(`[Queue] Added batch coordinator job for batch ${data.batchId}`);
   return job;
+}
+
+/**
+ * Add an ad format analysis job to the queue
+ */
+export async function addAdFormatAnalysisJob(
+  data: AdFormatAnalysisJobData,
+  options?: { priority?: number; delay?: number }
+): Promise<Job<AdFormatAnalysisJobData>> {
+  const queue = getQueue<AdFormatAnalysisJobData>(QUEUE_NAMES.AD_FORMAT_ANALYSIS);
+  const job = await queue.add('analyze-format', data, {
+    priority: options?.priority,
+    delay: options?.delay,
+    jobId: data.jobId,
+  });
+  console.log(`[Queue] Added ad format analysis job: ${data.jobId} for ${data.filename}`);
+  return job;
+}
+
+/**
+ * Add multiple ad format analysis jobs in bulk
+ */
+export async function addAdFormatAnalysisJobs(
+  jobs: Array<{ data: AdFormatAnalysisJobData; priority?: number }>
+): Promise<Job<AdFormatAnalysisJobData>[]> {
+  const queue = getQueue<AdFormatAnalysisJobData>(QUEUE_NAMES.AD_FORMAT_ANALYSIS);
+  const bulkJobs = jobs.map(({ data, priority }) => ({
+    name: 'analyze-format',
+    data,
+    opts: { priority, jobId: data.jobId },
+  }));
+
+  const addedJobs = await queue.addBulk(bulkJobs);
+  console.log(`[Queue] Added ${addedJobs.length} ad format analysis jobs in bulk`);
+  return addedJobs;
 }
 
 /**

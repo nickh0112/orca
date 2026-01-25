@@ -130,6 +130,7 @@ async function enrichWithMediaAnalysis(
     type: MediaType;
     url: string;
     buffer?: Buffer;
+    contentType?: string;
   }> = [];
 
   const postsWithMedia = posts.filter((p) => p.mediaUrl);
@@ -149,10 +150,12 @@ async function enrichWithMediaAnalysis(
     if (isVideo || isImage) {
       // Download video/image if needed
       let buffer: Buffer | undefined;
+      let contentType: string | undefined;
       if (isVideo) {
         try {
           const videoData = await downloadVideo(post.mediaUrl!);
           buffer = videoData?.buffer;
+          contentType = videoData?.contentType;
         } catch (error) {
           console.warn(`[Media Analysis] Failed to download ${post.id}:`, error);
         }
@@ -163,8 +166,15 @@ async function enrichWithMediaAnalysis(
         type: isVideo ? 'video' : 'image',
         url: post.mediaUrl!,
         buffer,
+        contentType,
       });
     }
+  }
+
+  // Debug logging for collected media items
+  console.log(`[Media Analysis] Collected ${mediaItems.length} items for analysis:`);
+  for (const item of mediaItems) {
+    console.log(`  - ${item.id}: ${item.type}, buffer: ${item.buffer ? `${(item.buffer.length/1024).toFixed(0)}KB` : 'none'}, url: ${item.url.slice(0, 60)}...`);
   }
 
   if (mediaItems.length === 0) {
@@ -194,14 +204,27 @@ async function enrichWithMediaAnalysis(
     },
   });
 
-  // Merge results back into posts
+  // Merge results back into posts with full Twelve Labs data
   const enrichedPosts = posts.map((post) => {
     const result = results.get(post.id);
     if (!result) return post;
 
+    // Extend visualAnalysis with full Twelve Labs data
+    const extendedVisualAnalysis = {
+      ...result.visualAnalysis,
+      // Preserve logo detections with timestamps and prominence
+      logoDetections: result.logoDetections,
+      // Preserve detailed content classification scores
+      contentClassification: result.contentClassification,
+      // Preserve timestamped transcript segments
+      transcriptSegments: result.transcript?.segments,
+      // Preserve video duration from index info
+      videoDuration: result.indexInfo?.duration,
+    };
+
     const enriched: SocialMediaPost & { visualAnalysis?: unknown } = {
       ...post,
-      visualAnalysis: result.visualAnalysis,
+      visualAnalysis: extendedVisualAnalysis,
     };
 
     // Add transcript for videos

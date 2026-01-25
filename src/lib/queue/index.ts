@@ -38,6 +38,14 @@ export {
   type ScraperJobResult,
   type BatchCoordinatorJobData,
   type BatchCoordinatorJobResult,
+  type AdFormatAnalysisJobData,
+  type AdFormatAnalysisJobResult,
+  type AdFormatAnalysis,
+  type SceneAnalysis,
+  type HookAnalysis,
+  type CTAAnalysis,
+  type PacingAnalysis,
+  type ProductMention,
   type JobProgress,
 } from './job-types';
 
@@ -52,6 +60,8 @@ export {
   addScraperJob,
   addScraperJobs,
   addBatchCoordinatorJob,
+  addAdFormatAnalysisJob,
+  addAdFormatAnalysisJobs,
   getJob,
   getQueueStats,
   getAllQueueStats,
@@ -76,6 +86,7 @@ export {
 // Workers (import separately to avoid loading in main app)
 // Use: import { getVideoWorker } from '@/lib/queue/workers/video-worker'
 // Use: import { getScraperWorker } from '@/lib/queue/workers/scraper-worker'
+// Use: import { getAdFormatWorker } from '@/lib/queue/workers/ad-format-worker'
 
 /**
  * Start all workers for processing queue jobs
@@ -84,9 +95,11 @@ export {
 export async function startAllWorkers(): Promise<void> {
   const { getVideoWorker } = await import('./workers/video-worker');
   const { getScraperWorker } = await import('./workers/scraper-worker');
+  const { getAdFormatWorker } = await import('./workers/ad-format-worker');
 
   getVideoWorker();
   getScraperWorker();
+  getAdFormatWorker();
 
   console.log('[Queue] All workers started');
 }
@@ -97,8 +110,9 @@ export async function startAllWorkers(): Promise<void> {
 export async function stopAllWorkers(): Promise<void> {
   const { stopVideoWorker } = await import('./workers/video-worker');
   const { stopScraperWorker } = await import('./workers/scraper-worker');
+  const { stopAdFormatWorker } = await import('./workers/ad-format-worker');
 
-  await Promise.all([stopVideoWorker(), stopScraperWorker()]);
+  await Promise.all([stopVideoWorker(), stopScraperWorker(), stopAdFormatWorker()]);
 
   console.log('[Queue] All workers stopped');
 }

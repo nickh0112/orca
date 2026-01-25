@@ -141,7 +141,7 @@ export function isMediaAnalysisAvailable(): {
 /**
  * Analyze all media items (videos and images) with batch processing
  *
- * @param media - Array of media items with id, type, url, and optional buffer
+ * @param media - Array of media items with id, type, url, optional buffer, and optional contentType
  * @param options - Queue options for concurrency, retries, and progress tracking
  * @returns Map of media id to analysis result (null if failed)
  */
@@ -151,6 +151,7 @@ export async function analyzeAllMedia(
     type: MediaType;
     url: string;
     buffer?: Buffer;
+    contentType?: string;
   }>,
   options?: {
     videoConcurrency?: number;  // Default: 5
@@ -169,6 +170,7 @@ export async function analyzeAllMedia(
     type: m.type,
     url: m.url,
     buffer: m.buffer,
+    contentType: m.contentType,
   }));
 
   // Create queue with options
