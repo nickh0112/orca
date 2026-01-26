@@ -36,6 +36,14 @@ function chunk<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
+// Timeout wrapper - returns fallback if promise takes too long
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+  ]);
+}
+
 // GET /api/batches/[batchId]/stream - SSE stream for batch processing
 export async function GET(
   request: NextRequest,
@@ -104,8 +112,8 @@ export async function GET(
       }, searchTerms: string[]) => {
         console.log('[DEBUG] Processing creator:', creator.name, 'status:', creator.status);
 
-        // Skip already completed creators
-        if (creator.status === 'COMPLETED') {
+        // Skip already completed or currently processing creators
+        if (creator.status === 'COMPLETED' || creator.status === 'PROCESSING') {
           return { skipped: true };
         }
 
@@ -191,14 +199,31 @@ export async function GET(
           const searchStartTime = Date.now();
 
           const [exaResult, googleResult, socialMediaContent] = await Promise.all([
-            searchCreator(creator.name, socialLinks, searchTerms),
-            isGoogleSearchConfigured()
-              ? searchFlaggedTopics(creator.name, handleNames, creator.language || 'en')
-              : Promise.resolve({ results: [], queries: [], topicCounts: {}, hasResults: false }),
-            fetchAllSocialMedia(socialLinks, monthsBack),
+            withTimeout(
+              searchCreator(creator.name, socialLinks, searchTerms),
+              30000, // 30s for Exa search
+              { results: [], queries: [] }
+            ),
+            withTimeout(
+              isGoogleSearchConfigured()
+                ? searchFlaggedTopics(creator.name, handleNames, creator.language || 'en')
+                : Promise.resolve({ results: [], queries: [], topicCounts: {}, hasResults: false }),
+              30000, // 30s for Google search
+              { results: [], queries: [], topicCounts: {}, hasResults: false }
+            ),
+            withTimeout(
+              fetchAllSocialMedia(socialLinks, monthsBack),
+              180000, // 3 min for social media (includes Apify + Twelve Labs)
+              []
+            ),
           ]);
 
           const searchDurationMs = Date.now() - searchStartTime;
+
+          // Log if we got empty results (possible timeout)
+          if (socialMediaContent.length === 0) {
+            console.warn(`[Timeout?] No social media content for ${creator.name} - may have timed out`);
+          }
 
           const { results, queries } = exaResult;
 
@@ -593,12 +618,41 @@ export async function GET(
           return;
         }
 
-        const searchTerms = batch.searchTerms
-          ? JSON.parse(batch.searchTerms)
+        // Reset stale PROCESSING creators (stuck for >10 minutes)
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const staleReset = await db.creator.updateMany({
+          where: {
+            batchId: batchId,
+            status: 'PROCESSING',
+            updatedAt: { lt: tenMinutesAgo }
+          },
+          data: { status: 'PENDING' }
+        });
+
+        if (staleReset.count > 0) {
+          console.log(`[StaleReset] Reset ${staleReset.count} stale PROCESSING creators to PENDING`);
+        }
+
+        // Re-fetch batch to get updated creators after stale reset
+        const updatedBatch = await db.batch.findUnique({
+          where: { id: batchId },
+          include: { creators: true },
+        });
+
+        if (!updatedBatch) {
+          sendEvent('error', { message: 'Batch not found after stale reset' });
+          controller.close();
+          return;
+        }
+
+        const searchTerms = updatedBatch.searchTerms
+          ? JSON.parse(updatedBatch.searchTerms)
           : [];
 
-        // Filter out already completed creators
-        const pendingCreators = batch.creators.filter(c => c.status !== 'COMPLETED');
+        // Filter out already completed and currently processing creators
+        const pendingCreators = updatedBatch.creators.filter(c =>
+          c.status !== 'COMPLETED' && c.status !== 'PROCESSING'
+        );
 
         // Process creators in parallel batches
         const creatorChunks = chunk(pendingCreators, CONCURRENT_CREATORS);
