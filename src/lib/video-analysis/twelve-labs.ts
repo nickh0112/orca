@@ -1595,6 +1595,109 @@ export async function analyzeVideos(
 }
 
 /**
+ * List all videos in a Twelve Labs index
+ * Used for recovery of videos that were indexed but not saved to database
+ */
+export async function listIndexedVideos(indexId?: string): Promise<Array<{
+  id: string;
+  createdAt: string;
+  duration?: number;
+  metadata?: Record<string, unknown>;
+}>> {
+  if (!isTwelveLabsConfigured()) {
+    console.log('[Twelve Labs] API key not configured');
+    return [];
+  }
+
+  const targetIndexId = indexId || await getOrCreateIndex();
+
+  const response = await fetch(
+    `${TWELVE_LABS_API_BASE}/indexes/${targetIndexId}/videos?page_limit=100`,
+    { headers: getHeaders() }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error(`[Twelve Labs] Failed to list videos: ${response.status} - ${error}`);
+    return [];
+  }
+
+  const data = await response.json();
+  return (data.data || []).map((video: {
+    _id: string;
+    created_at: string;
+    system_metadata?: { duration?: number };
+    metadata?: Record<string, unknown>;
+  }) => ({
+    id: video._id,
+    createdAt: video.created_at,
+    duration: video.system_metadata?.duration,
+    metadata: video.metadata || video.system_metadata,
+  }));
+}
+
+/**
+ * Get transcript and analysis for an already-indexed video
+ * Used for recovery - skips indexing since video already exists
+ */
+export async function recoverVideoAnalysis(
+  videoId: string,
+  indexId?: string
+): Promise<VideoAnalysisResult | null> {
+  if (!isTwelveLabsConfigured()) {
+    console.log('[Twelve Labs] API key not configured');
+    return null;
+  }
+
+  const targetIndexId = indexId || await getOrCreateIndex();
+
+  console.log(`[Twelve Labs] Recovering analysis for video: ${videoId}`);
+
+  try {
+    const [transcript, comprehensive] = await Promise.all([
+      getTranscript(targetIndexId, videoId),
+      analyzeComprehensive(targetIndexId, videoId),
+    ]);
+
+    // Populate coverage stats
+    const transcriptWordCount = transcript.text.split(/\s+/).filter(w => w.length > 0).length;
+    if (comprehensive.visualAnalysis.safetyRationale) {
+      comprehensive.visualAnalysis.safetyRationale.coverageStats = {
+        videoDuration: 0,
+        transcriptWords: transcriptWordCount,
+        framesAnalyzed: 0,
+      };
+    }
+
+    // Merge logo detections with visual analysis brands
+    const logoBrands = convertLogosToBrands(comprehensive.logoDetections);
+    const mergedBrands = mergeBrandDetections(comprehensive.visualAnalysis.brands, logoBrands);
+
+    const enhancedVisualAnalysis: VisualAnalysis = {
+      ...comprehensive.visualAnalysis,
+      brands: mergedBrands,
+    };
+
+    console.log(`[Twelve Labs] Recovery complete: ${transcript.text.length} chars, ${mergedBrands.length} brands`);
+
+    return {
+      transcript,
+      visualAnalysis: enhancedVisualAnalysis,
+      indexInfo: {
+        indexId: targetIndexId,
+        videoId,
+        status: 'ready',
+      },
+      logoDetections: comprehensive.logoDetections,
+      contentClassification: comprehensive.contentClassification,
+    };
+  } catch (error) {
+    console.error(`[Twelve Labs] Recovery failed for video ${videoId}:`, error);
+    return null;
+  }
+}
+
+/**
  * Format visual analysis for Claude prompt
  */
 export function formatVisualAnalysisForPrompt(analysis: VisualAnalysis): string {
