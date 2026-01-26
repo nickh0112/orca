@@ -26,26 +26,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Domain not allowed' }, { status: 403 });
     }
 
-    // Fetch with browser-like headers
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.instagram.com/',
-      },
-    });
+    // Forward Range header for seeking support
+    const rangeHeader = request.headers.get('Range');
+    const fetchHeaders: HeadersInit = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://www.instagram.com/',
+    };
+    if (rangeHeader) {
+      fetchHeaders['Range'] = rangeHeader;
+    }
 
-    if (!response.ok) {
+    const response = await fetch(url, { headers: fetchHeaders });
+
+    // Accept both 200 (full content) and 206 (partial content) responses
+    if (!response.ok && response.status !== 206) {
       return NextResponse.json({ error: 'Fetch failed' }, { status: response.status });
     }
 
-    // Stream the response with proper content-type
+    // Build response headers, forwarding relevant ones from upstream
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const responseHeaders: HeadersInit = {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400',
+      'Accept-Ranges': response.headers.get('accept-ranges') || 'bytes',
+    };
+
+    const contentLength = response.headers.get('content-length');
+    if (contentLength) {
+      responseHeaders['Content-Length'] = contentLength;
+    }
+
+    const contentRange = response.headers.get('content-range');
+    if (contentRange) {
+      responseHeaders['Content-Range'] = contentRange;
+    }
 
     return new NextResponse(response.body, {
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400', // Cache for 1 day
-      },
+      status: response.status, // Preserve 206 for partial content
+      headers: responseHeaders,
     });
   } catch (error) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });

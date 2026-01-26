@@ -130,6 +130,8 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
 
+    console.debug('[VideoPlayer] seekTo called', { time, requestId, readyState: video.readyState });
+
     // Store this as the pending seek (cancels any previous pending seek)
     pendingSeekRef.current = { time, id: requestId };
 
@@ -143,6 +145,7 @@ export function VideoPlayer({
       // Only proceed if this is still the active seek request
       if (pendingSeekRef.current?.id !== requestId) return;
 
+      console.debug('[VideoPlayer] Performing seek', { time, readyState: video.readyState });
       video.currentTime = time;
       pendingSeekRef.current = null;
     };
@@ -153,8 +156,22 @@ export function VideoPlayer({
       return;
     }
 
+    // Set up timeout to attempt seek anyway after 5 seconds
+    const timeoutId = setTimeout(() => {
+      if (canPlayListenerRef.current) {
+        video.removeEventListener('canplay', canPlayListenerRef.current);
+        canPlayListenerRef.current = null;
+      }
+      if (pendingSeekRef.current?.id === requestId) {
+        console.warn('[VideoPlayer] Seek timeout - attempting seek anyway', { time, readyState: video.readyState });
+        video.currentTime = time;
+        pendingSeekRef.current = null;
+      }
+    }, 5000);
+
     // Otherwise wait for canplay event
     const handleCanPlay = () => {
+      clearTimeout(timeoutId);
       video.removeEventListener('canplay', handleCanPlay);
       canPlayListenerRef.current = null;
       performSeek();
@@ -230,9 +247,33 @@ export function VideoPlayer({
   }, [t]);
 
   const handleLoadedData = useCallback(() => {
+    const video = videoRef.current;
+    console.debug('[VideoPlayer] loadeddata', {
+      readyState: video?.readyState,
+      duration: video?.duration,
+      src: video?.src?.slice(0, 100)
+    });
     setIsLoading(false);
     setError(null);
   }, []);
+
+  // Debug: Log seeking events
+  const handleSeeking = useCallback(() => {
+    const video = videoRef.current;
+    console.debug('[VideoPlayer] seeking', {
+      currentTime: video?.currentTime,
+      readyState: video?.readyState
+    });
+  }, []);
+
+  const handleSeekedInternal = useCallback(() => {
+    const video = videoRef.current;
+    console.debug('[VideoPlayer] seeked', {
+      currentTime: video?.currentTime,
+      readyState: video?.readyState
+    });
+    onSeeked?.();
+  }, [onSeeked]);
 
   // Control handlers
   const togglePlay = useCallback(() => {
@@ -344,7 +385,8 @@ export function VideoPlayer({
         onPause={handlePause}
         onError={handleError}
         onLoadedData={handleLoadedData}
-        onSeeked={() => onSeeked?.()}
+        onSeeking={handleSeeking}
+        onSeeked={handleSeekedInternal}
         playsInline
       />
 
