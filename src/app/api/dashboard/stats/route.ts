@@ -105,62 +105,6 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Activity trend - show months from first batch to now (max 6 months)
-    // Find first batch date (or use current month if none)
-    const firstBatch = await db.batch.findFirst({
-      where: userFilter,
-      orderBy: { createdAt: 'asc' },
-      select: { createdAt: true },
-    });
-
-    const startDate = firstBatch?.createdAt || new Date();
-
-    // Calculate months between start and now (max 6)
-    const monthCounts: Record<string, number> = {};
-    const tempDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-    const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    let monthCount = 0;
-    while (tempDate <= endDate && monthCount < 6) {
-      const key = `${tempDate.getFullYear()}-${String(tempDate.getMonth() + 1).padStart(2, '0')}`;
-      monthCounts[key] = 0;
-      tempDate.setMonth(tempDate.getMonth() + 1);
-      monthCount++;
-    }
-
-    // Ensure at least current month is shown
-    if (Object.keys(monthCounts).length === 0) {
-      const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      monthCounts[key] = 0;
-    }
-
-    // Fetch batches within the date range
-    const oldestMonthKey = Object.keys(monthCounts)[0];
-    const [oldestYear, oldestMonth] = oldestMonthKey.split('-').map(Number);
-    const rangeStart = new Date(oldestYear, oldestMonth - 1, 1);
-
-    const batches = await db.batch.findMany({
-      where: {
-        createdAt: { gte: rangeStart },
-        ...userFilter,
-      },
-      select: { createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    // Count batches per month
-    for (const batch of batches) {
-      const key = `${batch.createdAt.getFullYear()}-${String(batch.createdAt.getMonth() + 1).padStart(2, '0')}`;
-      if (key in monthCounts) {
-        monthCounts[key]++;
-      }
-    }
-
-    const activityTrend = Object.entries(monthCounts).map(([month, count]) => ({
-      month,
-      batchCount: count,
-    }));
-
     // Recent batches (filtered by user if specified)
     const recentBatches = await db.batch.findMany({
       take: 10,
@@ -224,7 +168,6 @@ export async function GET(request: NextRequest) {
       },
       teamActivity: teamActivityWithCreators,
       riskDistribution,
-      activityTrend,
       recentBatches: recentBatchesTransformed,
     });
   } catch (error) {

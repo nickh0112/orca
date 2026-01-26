@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { User, UsersRound, Plus, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useUserEmail } from '@/hooks/use-user-email';
-import { BrandSafetyTrendChart } from '@/components/dashboard/brand-safety-trend-chart';
 import { BatchesTable } from '@/components/dashboard/batches-table';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
@@ -129,27 +128,6 @@ export default function DashboardPage() {
       .catch(() => setIsLoading(false));
   }, [viewMode, email]);
 
-  // Generate trend data from activity trend
-  const trendChartData = useMemo(() => {
-    if (!stats?.activityTrend) return [];
-
-    // Return zeros until real trend data is available from the API
-    return stats.activityTrend.map((item) => {
-      // Convert "2026-01" to "Jan" format
-      const [year, monthNum] = item.month.split('-');
-      const date = new Date(parseInt(year), parseInt(monthNum) - 1);
-      const shortMonth = date.toLocaleDateString('en-US', { month: 'short' });
-
-      return {
-        month: shortMonth,
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-      };
-    });
-  }, [stats?.activityTrend]);
-
   // Transform data for BatchesTable
   const batchesForTable = useMemo(() => {
     if (!stats?.recentBatches) return [];
@@ -267,9 +245,6 @@ export default function DashboardPage() {
               color={stats.summary.successRate >= 90 ? 'success' : stats.summary.successRate >= 70 ? 'warning' : 'danger'}
             />
           </div>
-
-          {/* Trend Chart */}
-          <BrandSafetyTrendChart data={trendChartData} />
 
           {/* Active Campaigns */}
           <div>
