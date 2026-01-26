@@ -4,12 +4,6 @@ import { fetchInstagram } from './instagram';
 import { fetchTikTok } from './tiktok';
 import { fetchYouTube } from './youtube';
 import {
-  isVespaConfigured,
-  queryTranscriptsByHandle,
-  convertVespaPostsToSocialMediaContent,
-  VespaPost,
-} from '@/lib/vespa';
-import {
   isApifyConfigured,
   fetchTikTokViaApify,
   fetchInstagramViaApify,
@@ -57,57 +51,7 @@ function chunk<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
-/**
- * Fetch content from Vespa for a handle
- * Returns SocialMediaContent if found, null otherwise
- */
 const MAX_POSTS_PER_PLATFORM = 10; // Limit posts to analyze per platform
-
-async function fetchFromVespa(
-  handle: string,
-  platform: 'instagram' | 'tiktok' | 'youtube',
-  monthsBack: number
-): Promise<SocialMediaContent | null> {
-  try {
-    // Pass monthsBack to Vespa query for server-side time filtering
-    const vespaPosts = await queryTranscriptsByHandle(handle, MAX_POSTS_PER_PLATFORM, monthsBack);
-
-    if (vespaPosts.length === 0) {
-      return null;
-    }
-
-    // Filter by platform (Vespa already filters by time)
-    const filteredPosts = vespaPosts.filter((p) => p.platform === platform);
-
-    if (filteredPosts.length === 0) {
-      return null;
-    }
-
-    // Convert to SocialMediaContent format
-    const content = convertVespaPostsToSocialMediaContent(filteredPosts, handle);
-    if (!content) {
-      return null;
-    }
-
-    // Convert to standard SocialMediaContent (without source field for type compatibility)
-    const result: SocialMediaContent = {
-      platform: content.platform,
-      handle: content.handle,
-      posts: content.posts as SocialMediaPost[],
-      fetchedAt: content.fetchedAt,
-    };
-
-    console.log(
-      `[Vespa] Found ${result.posts.length} posts for ${platform}/@${handle} ` +
-        `(${result.posts.filter((p) => p.transcript).length} with transcripts)`
-    );
-
-    return result;
-  } catch (error) {
-    console.error(`Vespa fetch failed for ${handle}:`, error);
-    return null;
-  }
-}
 
 /**
  * Enrich posts with media analysis (videos via Twelve Labs, images via Claude Vision)
@@ -269,10 +213,9 @@ async function enrichWithMediaAnalysis(
  * Fetch social media content from all platforms
  *
  * Strategy (in order of preference):
- * 1. Try Vespa first (for pre-indexed content with transcripts)
- * 2. Fall back to Apify scrapers (reliable video URLs)
- * 3. Fall back to platform APIs (may have limitations)
- * 4. Enrich videos with Twelve Labs analysis (if configured)
+ * 1. Apify scrapers (reliable video URLs for TikTok/Instagram)
+ * 2. Platform APIs (fallback - TikTok TCM, Instagram Graph, YouTube API)
+ * 3. Twelve Labs enrichment (video analysis and transcription)
  */
 export async function fetchAllSocialMedia(
   socialLinks: string[],
@@ -294,20 +237,14 @@ export async function fetchAllSocialMedia(
   console.log(`Found ${handles.length} social handles to fetch`);
 
   const socialMediaContent: SocialMediaContent[] = [];
-  const vespaConfigured = isVespaConfigured();
   const apifyConfigured = isApifyConfigured();
   const twelveLabsConfigured = isTwelveLabsConfigured();
 
   // Log available integrations
   console.log(
-    `[Config] Vespa: ${vespaConfigured ? 'YES' : 'NO'}, ` +
-      `Apify: ${apifyConfigured ? 'YES' : 'NO'}, ` +
+    `[Config] Apify: ${apifyConfigured ? 'YES' : 'NO'}, ` +
       `Twelve Labs: ${twelveLabsConfigured ? 'YES' : 'NO'}`
   );
-
-  if (vespaConfigured) {
-    console.log('[Vespa] Checking for existing transcripts...');
-  }
 
   /**
    * Process a single handle - extracted for parallel processing
@@ -316,14 +253,8 @@ export async function fetchAllSocialMedia(
     let content: SocialMediaContent | null = null;
     const platform = handle.platform as 'instagram' | 'tiktok' | 'youtube';
 
-    // Step 1: Try Vespa first if configured (free, fast, has transcripts)
-    if (vespaConfigured) {
-      content = await fetchFromVespa(handle.handle, platform, monthsBack);
-    }
-
-    // Step 2: Try Apify if Vespa miss and Apify is configured
-    // Apify provides reliable video URLs for TikTok/Instagram
-    if (!content && apifyConfigured && (platform === 'tiktok' || platform === 'instagram')) {
+    // Step 1: Try Apify first (reliable video URLs for TikTok/Instagram)
+    if (apifyConfigured && (platform === 'tiktok' || platform === 'instagram')) {
       console.log(
         `[Apify] Fetching from ${platform} scraper for @${handle.handle}`
       );
@@ -346,7 +277,7 @@ export async function fetchAllSocialMedia(
       }
     }
 
-    // Step 3: Fall back to platform API if not in Vespa/Apify
+    // Step 2: Fall back to platform API if Apify miss or not applicable
     if (!content) {
       console.log(
         `[API] Fetching from ${platform} API for @${handle.handle}`
@@ -369,7 +300,7 @@ export async function fetchAllSocialMedia(
       }
     }
 
-    // Step 4: Enrich media with analysis (videos via Twelve Labs, images via Claude Vision)
+    // Step 3: Enrich media with analysis (videos via Twelve Labs, images via Claude Vision)
     if (content && enableTwelveLabs && (twelveLabsConfigured || isClaudeVisionConfigured())) {
       const mediaWithoutAnalysis = content.posts.filter(
         (p) =>
